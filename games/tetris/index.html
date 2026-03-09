@@ -104,6 +104,10 @@
   .controls-info { font-size:9px; letter-spacing:1px; color:var(--dim); line-height:2.2; }
   .controls-info span { color:var(--accent2); }
 
+  .scene-info { text-align:center; line-height:1.6; }
+  .scene-name { font-family:'Bebas Neue',sans-serif; font-size:15px; letter-spacing:4px; color:var(--accent); }
+  .scene-meta { font-size:9px; letter-spacing:2px; color:var(--dim); }
+
   .arena-wrap { display:flex; flex-direction:column; align-items:center; gap:6px; }
   .arena-label { font-family:'Bebas Neue',sans-serif; font-size:11px; letter-spacing:5px; color:var(--dim); }
 
@@ -185,6 +189,14 @@
         <button class="btn sm" onclick="setGrid(5)" id="grid-5">5×5</button>
       </div>
     </div>
+    <div>
+      <div class="menu-section-title">Fall Speed</div>
+      <div class="grid-btns">
+        <button class="btn sm" onclick="setSpeed('slow')" id="speed-slow">Slow</button>
+        <button class="btn sm active" onclick="setSpeed('normal')" id="speed-normal">Normal</button>
+        <button class="btn sm" onclick="setSpeed('fast')" id="speed-fast">Fast</button>
+      </div>
+    </div>
     <button class="btn" onclick="startGame()">LAUNCH MISSION</button>
   </div>
 
@@ -219,7 +231,10 @@
       </div>
 
       <div class="arena-wrap">
-        <div class="arena-label">BUILD FROM THE GROUND UP</div>
+        <div class="scene-info">
+          <div class="scene-name" id="scene-name-disp">—</div>
+          <div class="scene-meta" id="scene-meta-disp">—</div>
+        </div>
         <canvas id="game-canvas"></canvas>
         <div class="progress-bar-wrap">
           <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
@@ -462,16 +477,16 @@ window.addEventListener('DOMContentLoaded',()=>{
 
 // ── NASA GIBS scenes (WMS, true-colour MODIS satellite imagery) ──
 const NASA_SCENES = [
-  { name:'Amazon Rainforest',   bbox:[-65,-10,-45,10]        },
-  { name:'Sahara Desert',       bbox:[0,18,30,35]            },
-  { name:'Himalayas',           bbox:[78,26,98,36]           },
-  { name:'Great Barrier Reef',  bbox:[142,-24,154,-14]       },
-  { name:'Greenland',           bbox:[-55,60,-20,80]         },
-  { name:'Grand Canyon',        bbox:[-114.5,35.5,-111,37.5] },
-  { name:'Nile Delta',          bbox:[29,29,33,32]           },
-  { name:'Maldives',            bbox:[72,1,74,4]             },
-  { name:'Iceland',             bbox:[-25,63,-12,67]         },
-  { name:'Patagonia',           bbox:[-75,-55,-65,-45]       },
+  { name:'Amazon Rainforest',   bbox:[-65,-10,-45,10],        type:'Tropical'  },
+  { name:'Sahara Desert',       bbox:[0,18,30,35],            type:'Arid'      },
+  { name:'Himalayas',           bbox:[78,26,98,36],           type:'Alpine'    },
+  { name:'Great Barrier Reef',  bbox:[142,-24,154,-14],       type:'Coastal'   },
+  { name:'Greenland',           bbox:[-55,60,-20,80],         type:'Polar'     },
+  { name:'Grand Canyon',        bbox:[-114.5,35.5,-111,37.5], type:'Arid'      },
+  { name:'Nile Delta',          bbox:[29,29,33,32],           type:'Coastal'   },
+  { name:'Maldives',            bbox:[72,1,74,4],             type:'Tropical'  },
+  { name:'Iceland',             bbox:[-25,63,-12,67],         type:'Volcanic'  },
+  { name:'Patagonia',           bbox:[-75,-55,-65,-45],       type:'Alpine'    },
 ];
 
 // ── OSM scenes (fallback) ──
@@ -539,10 +554,29 @@ async function fetchOSMImage(imgSize, scene){
 // ── Start ──
 let TS = 64;
 let currentSceneName = '';
+let currentScene = null;
+let selSpeed = 'normal';
+let baseFallInterval = 1800;
+const SPEED_MAP = { slow: 2800, normal: 1800, fast: 900 };
+
+function setSpeed(s){
+  selSpeed = s;
+  ['slow','normal','fast'].forEach(x=>document.getElementById('speed-'+x).classList.toggle('active',x===s));
+}
+
+function formatLatLon(bbox){
+  const [minLon,minLat,maxLon,maxLat] = bbox;
+  const lat = ((minLat+maxLat)/2).toFixed(1);
+  const lon = ((minLon+maxLon)/2).toFixed(1);
+  const latStr = lat>=0 ? lat+'°N' : Math.abs(lat)+'°S';
+  const lonStr = lon>=0 ? lon+'°E' : Math.abs(lon)+'°W';
+  return `${latStr},  ${lonStr}`;
+}
 
 async function startGame(){
   gridN=selGrid; totalTiles=gridN*gridN;
   lockedCount=0; score=0; streak=0; misses=0; startTime=Date.now();
+  baseFallInterval = SPEED_MAP[selSpeed]; fallInterval = baseFallInterval;
 
   const availH = window.innerHeight - 80;
   const availW = window.innerWidth - 150*2 - 16*2 - 32;
@@ -557,7 +591,8 @@ async function startGame(){
 
   const idx = Math.floor(Math.random()*NASA_SCENES.length);
   const nasaScene = NASA_SCENES[idx];
-  const osmScene  = OSM_SCENES[idx];   // same location, OSM fallback
+  const osmScene  = OSM_SCENES[idx];
+  currentScene = nasaScene;
 
   // 1. Try NASA GIBS (real satellite)
   try {
@@ -582,8 +617,9 @@ async function startGame(){
   document.getElementById('loading-screen').style.display='none';
   document.getElementById('game-screen').style.display='block';
 
-  const lbl = document.querySelector('.arena-label');
-  if(lbl) lbl.textContent = currentSceneName;
+  document.getElementById('scene-name-disp').textContent = currentSceneName.toUpperCase();
+  document.getElementById('scene-meta-disp').textContent =
+    currentScene.type + '  •  ' + formatLatLon(currentScene.bbox);
 
   // Slice tiles + compute edge colours
   tiles=[]; locked=Array.from({length:gridN},()=>Array(gridN).fill(false));
@@ -926,7 +962,7 @@ document.addEventListener('keydown',e=>{
   else if(e.key==='ArrowDown'){fallInterval=120;e.preventDefault();}
   else if(e.key===' '){doLand();e.preventDefault();}
 });
-document.addEventListener('keyup',e=>{if(e.key==='ArrowDown')fallInterval=1800;});
+document.addEventListener('keyup',e=>{if(e.key==='ArrowDown')fallInterval=baseFallInterval;});
 
 // ── HUD ──
 function updateHUD(){
