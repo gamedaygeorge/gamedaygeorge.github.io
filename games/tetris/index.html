@@ -63,6 +63,7 @@
   .logo-sub { font-size: 11px; letter-spacing: 6px; color: var(--dim); text-transform: uppercase; margin-top: -14px; }
 
   .menu-section-title { font-size: 10px; letter-spacing: 4px; color: var(--dim); text-transform: uppercase; text-align: center; margin-bottom: 10px; }
+  .menu-section-desc { font-size: 10px; color: var(--dim); text-align: center; margin-top: 8px; opacity: 0.7; max-width: 340px; }
 
   .imagery-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; width: 100%; max-width: 480px; }
 
@@ -183,6 +184,7 @@
           <div class="opt-label">Coastal</div>
         </div>
       </div>
+      <div class="menu-section-desc">Browse landscape styles — a random location is chosen each mission.</div>
     </div>
     <div>
       <div class="menu-section-title">Data Source</div>
@@ -191,6 +193,7 @@
         <button class="btn sm" onclick="setSource('esa')" id="src-esa">ESA</button>
         <button class="btn sm" onclick="setSource('osm')" id="src-osm">OSM</button>
       </div>
+      <div class="menu-section-desc">NASA MODIS and ESA Sentinel-2 fetch real satellite imagery. OSM uses map tiles.</div>
     </div>
     <div>
       <div class="menu-section-title">Grid Size</div>
@@ -199,6 +202,7 @@
         <button class="btn sm active" onclick="setGrid(4)" id="grid-4">4×4</button>
         <button class="btn sm" onclick="setGrid(5)" id="grid-5">5×5</button>
       </div>
+      <div class="menu-section-desc">Larger grids mean more pieces and a longer puzzle.</div>
     </div>
     <div>
       <div class="menu-section-title">Difficulty</div>
@@ -207,6 +211,7 @@
         <button class="btn sm" onclick="setDifficulty('moderate')" id="diff-moderate">Moderate</button>
         <button class="btn sm" onclick="setDifficulty('hard')" id="diff-hard">Hard</button>
       </div>
+      <div class="menu-section-desc">Easy shows all four colour edge hints. Moderate shows two. Hard shows none.</div>
     </div>
     <div>
       <div class="menu-section-title">Fall Speed</div>
@@ -215,6 +220,7 @@
         <button class="btn sm active" onclick="setSpeed('normal')" id="speed-normal">Normal</button>
         <button class="btn sm" onclick="setSpeed('fast')" id="speed-fast">Fast</button>
       </div>
+      <div class="menu-section-desc">How quickly tiles descend. Hold ↓ to drop faster mid-game.</div>
     </div>
     <button class="btn" onclick="startGame()">LAUNCH MISSION</button>
   </div>
