@@ -112,6 +112,20 @@
   .scene-links a { font-size:9px; letter-spacing:2px; color:var(--dim); text-decoration:none; transition:color 0.2s; }
   .scene-links a:hover { color:var(--accent); }
 
+  /* ── SCORES ── */
+  .best-score-wrap { text-align:center; }
+  .best-score-label { font-size:9px; letter-spacing:3px; color:var(--dim); text-transform:uppercase; }
+  .best-score-value { font-family:'Bebas Neue',sans-serif; font-size:36px; color:var(--accent); letter-spacing:2px; line-height:1.1; }
+  .best-score-sub { font-size:9px; color:var(--dim); letter-spacing:1px; margin-top:2px; }
+
+  .history-wrap { width:100%; max-width:640px; }
+  .history-title { font-size:9px; letter-spacing:3px; color:var(--dim); text-transform:uppercase; margin-bottom:8px; text-align:center; }
+  .history-scroll { overflow-x:auto; }
+  .history-table { width:100%; border-collapse:collapse; font-size:9px; letter-spacing:1px; white-space:nowrap; }
+  .history-table th { color:var(--dim); text-transform:uppercase; letter-spacing:2px; padding:5px 10px; border-bottom:1px solid var(--border); text-align:left; }
+  .history-table td { color:var(--text); padding:5px 10px; border-bottom:1px solid rgba(26,58,92,0.3); }
+  .history-table tr.hi td { color:var(--accent); }
+
   .brand-footer { font-size:9px; letter-spacing:2px; color:var(--dim); text-align:center; opacity:0.6; }
   .brand-footer a { color:var(--dim); text-decoration:none; transition:color 0.2s; }
   .brand-footer a:hover { color:var(--accent); opacity:1; }
@@ -191,6 +205,7 @@
       <div class="logo">ORBITAL</div>
       <div class="logo-sub">Satellite Tile Puzzle</div>
     </div>
+    <div id="best-score-disp"></div>
     <div>
       <div class="menu-section-title">Scene Type</div>
       <div class="imagery-grid">
@@ -344,6 +359,10 @@
       </div>
     </div>
     <div class="win-stats" id="win-stats"></div>
+    <div class="history-wrap">
+      <div class="history-title">Mission Log</div>
+      <div class="history-scroll"><div id="history-table-wrap"></div></div>
+    </div>
     <button class="btn" onclick="backToMenu()">NEW MISSION</button>
     <div class="brand-footer">
       A <a href="https://diamondsky.au/" target="_blank" rel="noopener">Diamond Sky</a> project
@@ -585,6 +604,7 @@ window.addEventListener('DOMContentLoaded',()=>{
       });
   });
   setGrid(4);
+  renderBestScore();
   if(!localStorage.getItem('orbital-tutorial-seen')) showTutorial();
 });
 
@@ -1203,13 +1223,60 @@ function winGame(){
   gameRunning=false;
   document.getElementById('game-screen').style.display='none';
   document.getElementById('win-screen').style.display='flex';
-  const t=Math.floor((Date.now()-startTime)/1000);
   populateSceneInfo('win-scene-name','win-scene-meta','win-maps-link','win-img-link');
+  const elapsed = Math.floor((Date.now()-startTime)/1000);
+  saveScore({ date:new Date().toISOString().slice(0,10), sceneName:currentSceneName, gridN, difficulty:selDifficulty, source:selSource, score, time:elapsed, misses });
+  renderHistory();
+  renderBestScore();
   document.getElementById('win-stats').innerHTML=
-    `Score: <strong>${score}</strong><br>Time: <strong>${Math.floor(t/60)}m ${t%60}s</strong><br>Misses: <strong>${misses}</strong><br>Tiles: <strong>${totalTiles}</strong>`;
+    `Score: <strong>${score}</strong><br>Time: <strong>${Math.floor(elapsed/60)}m ${elapsed%60}s</strong><br>Misses: <strong>${misses}</strong><br>Tiles: <strong>${totalTiles}</strong>`;
   const wc=document.getElementById('win-canvas');
   const ws=Math.min(280,window.innerWidth-80); wc.width=wc.height=ws;
   wc.getContext('2d').drawImage(sourceImage,0,0,ws,ws);
+}
+
+// ── Scores ──
+const SCORES_KEY = 'orbital-scores';
+
+function loadScores(){
+  try { return JSON.parse(localStorage.getItem(SCORES_KEY)) || []; }
+  catch(e){ return []; }
+}
+
+function saveScore(entry){
+  const scores = loadScores();
+  scores.unshift(entry);
+  if(scores.length > 20) scores.length = 20;
+  localStorage.setItem(SCORES_KEY, JSON.stringify(scores));
+}
+
+function renderBestScore(){
+  const el = document.getElementById('best-score-disp');
+  if(!el) return;
+  const scores = loadScores();
+  if(!scores.length){ el.innerHTML=''; return; }
+  const best = scores.reduce((b,s)=>s.score>b.score?s:b, scores[0]);
+  el.innerHTML = `<div class="best-score-wrap">
+    <div class="best-score-label">Best Score</div>
+    <div class="best-score-value">${best.score}</div>
+    <div class="best-score-sub">${best.sceneName} &nbsp;·&nbsp; ${best.gridN}×${best.gridN} &nbsp;·&nbsp; ${best.difficulty}</div>
+  </div>`;
+}
+
+function renderHistory(){
+  const el = document.getElementById('history-table-wrap');
+  if(!el) return;
+  const scores = loadScores();
+  if(!scores.length){ el.innerHTML='<div style="font-size:10px;color:var(--dim);text-align:center;padding:8px;">No missions logged yet.</div>'; return; }
+  const best = scores.reduce((b,s)=>s.score>b.score?s:b, scores[0]);
+  const rows = scores.map(s=>{
+    const t=`${Math.floor(s.time/60)}m ${String(s.time%60).padStart(2,'0')}s`;
+    const hi = s===best ? ' class="hi"' : '';
+    return `<tr${hi}><td>${s.date}</td><td>${s.sceneName}</td><td>${s.gridN}×${s.gridN}</td><td>${s.difficulty}</td><td>${s.source.toUpperCase()}</td><td>${s.score}</td><td>${t}</td><td>${s.misses}</td></tr>`;
+  }).join('');
+  el.innerHTML = `<table class="history-table"><thead><tr>
+    <th>Date</th><th>Location</th><th>Grid</th><th>Diff</th><th>Source</th><th>Score</th><th>Time</th><th>Misses</th>
+  </tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 function showTutorial(){
@@ -1226,6 +1293,7 @@ function backToMenu(){
   document.getElementById('loading-screen').style.display='none';
   document.getElementById('menu-screen').style.display='flex';
   gameRunning=false; cur=null; pool=[];
+  renderBestScore();
 }
 </script>
 </body>
