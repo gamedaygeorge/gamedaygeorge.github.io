@@ -107,6 +107,9 @@
   .scene-info { text-align:center; line-height:1.6; }
   .scene-name { font-family:'Bebas Neue',sans-serif; font-size:15px; letter-spacing:4px; color:var(--accent); }
   .scene-meta { font-size:9px; letter-spacing:2px; color:var(--dim); }
+  .scene-links { display:flex; gap:12px; justify-content:center; margin-top:4px; }
+  .scene-links a { font-size:9px; letter-spacing:2px; color:var(--dim); text-decoration:none; transition:color 0.2s; }
+  .scene-links a:hover { color:var(--accent); }
 
   .arena-wrap { display:flex; flex-direction:column; align-items:center; gap:6px; }
   .arena-label { font-family:'Bebas Neue',sans-serif; font-size:11px; letter-spacing:5px; color:var(--dim); }
@@ -234,6 +237,10 @@
         <div class="scene-info">
           <div class="scene-name" id="scene-name-disp">—</div>
           <div class="scene-meta" id="scene-meta-disp">—</div>
+          <div class="scene-links">
+            <a id="maps-link" href="#" target="_blank" rel="noopener">Maps ↗</a>
+            <a id="img-link" href="#" target="_blank" rel="noopener" style="display:none">Image ↗</a>
+          </div>
         </div>
         <canvas id="game-canvas"></canvas>
         <div class="progress-bar-wrap">
@@ -504,13 +511,7 @@ const OSM_SCENES = [
 ];
 
 async function fetchNASAImage(imgSize, scene){
-  const [minLon,minLat,maxLon,maxLat] = scene.bbox;
-  const url = `https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?`+
-    `SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap`+
-    `&LAYERS=MODIS_Terra_CorrectedReflectance_TrueColor`+
-    `&SRS=EPSG:4326&STYLES=&FORMAT=image/jpeg`+
-    `&TIME=${getImageDate()}&WIDTH=${imgSize}&HEIGHT=${imgSize}`+
-    `&BBOX=${minLon},${minLat},${maxLon},${maxLat}`;
+  const url = buildNASAUrl(imgSize, scene);
   console.log('[ORBITAL] Trying NASA GIBS:', scene.name);
   const timeout = new Promise((_,rej) => setTimeout(()=>rej(new Error('timeout')), 8000));
   const load = fetch(url).then(r=>{ if(!r.ok) throw new Error(`HTTP ${r.status}`); return r.blob(); })
@@ -573,6 +574,31 @@ function formatLatLon(bbox){
   return `${latStr},  ${lonStr}`;
 }
 
+function bboxCenter(bbox){
+  const [minLon,minLat,maxLon,maxLat] = bbox;
+  return { lat:((minLat+maxLat)/2).toFixed(5), lon:((minLon+maxLon)/2).toFixed(5) };
+}
+
+function buildMapsUrl(bbox){
+  const {lat,lon} = bboxCenter(bbox);
+  return `https://www.google.com/maps/@${lat},${lon},8z`;
+}
+
+function buildNASAUrl(imgSize, scene){
+  const [minLon,minLat,maxLon,maxLat] = scene.bbox;
+  return `https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?`+
+    `SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap`+
+    `&LAYERS=MODIS_Terra_CorrectedReflectance_TrueColor`+
+    `&SRS=EPSG:4326&STYLES=&FORMAT=image/jpeg`+
+    `&TIME=${getImageDate()}&WIDTH=${imgSize}&HEIGHT=${imgSize}`+
+    `&BBOX=${minLon},${minLat},${maxLon},${maxLat}`;
+}
+
+function buildOSMUrl(bbox){
+  const {lat,lon} = bboxCenter(bbox);
+  return `https://www.openstreetmap.org/#map=10/${lat}/${lon}`;
+}
+
 async function startGame(){
   gridN=selGrid; totalTiles=gridN*gridN;
   lockedCount=0; score=0; streak=0; misses=0; startTime=Date.now();
@@ -594,10 +620,14 @@ async function startGame(){
   const osmScene  = OSM_SCENES[idx];
   currentScene = nasaScene;
 
+  const imageDate = getImageDate();
+  let imageUrl = '';
+
   // 1. Try NASA GIBS (real satellite)
   try {
     sourceImage = await fetchNASAImage(imgSize, nasaScene);
     currentSceneName = nasaScene.name;
+    imageUrl = buildNASAUrl(imgSize, nasaScene);
     console.log('[ORBITAL] NASA success:', nasaScene.name);
   } catch(e) {
     console.warn('[ORBITAL] NASA failed:', e.message, '— trying OSM');
@@ -605,12 +635,14 @@ async function startGame(){
     try {
       sourceImage = await fetchOSMImage(imgSize, osmScene);
       currentSceneName = osmScene.name;
+      imageUrl = buildOSMUrl(nasaScene.bbox);
       console.log('[ORBITAL] OSM success:', osmScene.name);
     } catch(e2) {
       console.warn('[ORBITAL] OSM failed:', e2.message, '— using procedural');
       // 3. Procedural fallback
       sourceImage = genNASA(imgSize);
       currentSceneName = nasaScene.name + ' (procedural)';
+      imageUrl = '';
     }
   }
 
@@ -619,7 +651,12 @@ async function startGame(){
 
   document.getElementById('scene-name-disp').textContent = currentSceneName.toUpperCase();
   document.getElementById('scene-meta-disp').textContent =
-    currentScene.type + '  •  ' + formatLatLon(currentScene.bbox);
+    currentScene.type + '  •  ' + formatLatLon(currentScene.bbox) + '  •  ' + imageDate;
+  const mapsLink = document.getElementById('maps-link');
+  mapsLink.href = buildMapsUrl(currentScene.bbox);
+  const imgLink = document.getElementById('img-link');
+  if(imageUrl){ imgLink.href = imageUrl; imgLink.style.display = ''; }
+  else { imgLink.style.display = 'none'; }
 
   // Slice tiles + compute edge colours
   tiles=[]; locked=Array.from({length:gridN},()=>Array(gridN).fill(false));
