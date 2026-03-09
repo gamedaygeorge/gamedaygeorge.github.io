@@ -185,11 +185,26 @@
       </div>
     </div>
     <div>
+      <div class="menu-section-title">Data Source</div>
+      <div class="grid-btns">
+        <button class="btn sm active" onclick="setSource('nasa')" id="src-nasa">NASA</button>
+        <button class="btn sm" onclick="setSource('osm')" id="src-osm">OSM</button>
+      </div>
+    </div>
+    <div>
       <div class="menu-section-title">Grid Size</div>
       <div class="grid-btns">
         <button class="btn sm" onclick="setGrid(3)" id="grid-3">3×3</button>
         <button class="btn sm active" onclick="setGrid(4)" id="grid-4">4×4</button>
         <button class="btn sm" onclick="setGrid(5)" id="grid-5">5×5</button>
+      </div>
+    </div>
+    <div>
+      <div class="menu-section-title">Difficulty</div>
+      <div class="grid-btns">
+        <button class="btn sm active" onclick="setDifficulty('easy')" id="diff-easy">Easy</button>
+        <button class="btn sm" onclick="setDifficulty('moderate')" id="diff-moderate">Moderate</button>
+        <button class="btn sm" onclick="setDifficulty('hard')" id="diff-hard">Hard</button>
       </div>
     </div>
     <div>
@@ -429,7 +444,8 @@ function genOcean(size){
 }
 
 // ── State ──
-let selImagery='nasa', selGrid=4;
+let selImagery='nasa', selGrid=4, selSource='nasa', selDifficulty='easy';
+const HINT_EDGES = { easy:4, moderate:2, hard:0 };
 let gridN, sourceImage, tileSize;
 let tiles=[], locked=[], pool=[];
 let cur=null; // {tileIdx, col, canvasRow, rotation}
@@ -446,6 +462,14 @@ function selectImagery(el){
 function setGrid(n){
   selGrid=n;
   [3,4,5].forEach(x=>document.getElementById('grid-'+x).classList.toggle('active',x===n));
+}
+function setSource(s){
+  selSource=s;
+  ['nasa','osm'].forEach(x=>document.getElementById('src-'+x).classList.toggle('active',x===s));
+}
+function setDifficulty(d){
+  selDifficulty=d;
+  ['easy','moderate','hard'].forEach(x=>document.getElementById('diff-'+x).classList.toggle('active',x===d));
 }
 window.addEventListener('DOMContentLoaded',()=>{
   [['prev-nasa',genNASA],['prev-city',genCity],['prev-ocean',genOcean]].forEach(([id,fn])=>{
@@ -623,23 +647,37 @@ async function startGame(){
   const imageDate = getImageDate();
   let imageUrl = '';
 
-  // 1. Try NASA GIBS (real satellite)
-  try {
-    sourceImage = await fetchNASAImage(imgSize, nasaScene);
-    currentSceneName = nasaScene.name;
-    imageUrl = buildNASAUrl(imgSize, nasaScene);
-    console.log('[ORBITAL] NASA success:', nasaScene.name);
-  } catch(e) {
-    console.warn('[ORBITAL] NASA failed:', e.message, '— trying OSM');
-    // 2. Try OSM tiles
+  if(selSource === 'nasa'){
+    // 1. Try NASA GIBS (real satellite)
+    try {
+      sourceImage = await fetchNASAImage(imgSize, nasaScene);
+      currentSceneName = nasaScene.name;
+      imageUrl = buildNASAUrl(imgSize, nasaScene);
+      console.log('[ORBITAL] NASA success:', nasaScene.name);
+    } catch(e) {
+      console.warn('[ORBITAL] NASA failed:', e.message, '— trying OSM');
+      // 2. OSM fallback
+      try {
+        sourceImage = await fetchOSMImage(imgSize, osmScene);
+        currentSceneName = osmScene.name;
+        imageUrl = buildOSMUrl(nasaScene.bbox);
+        console.log('[ORBITAL] OSM success:', osmScene.name);
+      } catch(e2) {
+        console.warn('[ORBITAL] OSM failed:', e2.message, '— using procedural');
+        sourceImage = genNASA(imgSize);
+        currentSceneName = nasaScene.name + ' (procedural)';
+        imageUrl = '';
+      }
+    }
+  } else {
+    // OSM only — no NASA fallback
     try {
       sourceImage = await fetchOSMImage(imgSize, osmScene);
       currentSceneName = osmScene.name;
       imageUrl = buildOSMUrl(nasaScene.bbox);
       console.log('[ORBITAL] OSM success:', osmScene.name);
-    } catch(e2) {
-      console.warn('[ORBITAL] OSM failed:', e2.message, '— using procedural');
-      // 3. Procedural fallback
+    } catch(e) {
+      console.warn('[ORBITAL] OSM failed:', e.message, '— using procedural');
       sourceImage = genNASA(imgSize);
       currentSceneName = nasaScene.name + ' (procedural)';
       imageUrl = '';
@@ -749,16 +787,17 @@ function refreshNextPreview(){
   ctx.save(); ctx.translate(SZ/2,SZ/2); ctx.rotate(cur.rotation*Math.PI/2);
   ctx.drawImage(t.cachedCanvas,-SZ/2,-SZ/2,SZ,SZ); ctx.restore();
 
-  // Edge strips
-  const scale=SZ/TS;
-  const W=Math.round(5*scale);
-  const rotated=[0,1,2,3].map(i=>t.edges[(i+4-cur.rotation)%4]);
-  ctx.globalAlpha=0.9;
-  ctx.fillStyle=rotated[0]; ctx.fillRect(0,0,SZ,W);
-  ctx.fillStyle=rotated[1]; ctx.fillRect(SZ-W,0,W,SZ);
-  ctx.fillStyle=rotated[2]; ctx.fillRect(0,SZ-W,SZ,W);
-  ctx.fillStyle=rotated[3]; ctx.fillRect(0,0,W,SZ);
-  ctx.globalAlpha=1;
+  // Edge strips (respect difficulty hint limit)
+  const limit=HINT_EDGES[selDifficulty];
+  if(limit>0){
+    const scale=SZ/TS;
+    const W=Math.round(5*scale);
+    const rotated=[0,1,2,3].map(i=>t.edges[(i+4-cur.rotation)%4]);
+    const rects=[[0,0,SZ,W],[SZ-W,0,W,SZ],[0,SZ-W,SZ,W],[0,0,W,SZ]];
+    ctx.globalAlpha=0.9;
+    for(let i=0;i<Math.min(limit,4);i++){ctx.fillStyle=rotated[i];ctx.fillRect(...rects[i]);}
+    ctx.globalAlpha=1;
+  }
 
   // Highlight on reference image
   const refEl=document.getElementById('ref-canvas');
@@ -904,7 +943,7 @@ function draw(){
     const opacityMap=[0,0.38,0.6,0.82,1.0];
     const alpha=opacityMap[exposedCount];
 
-    drawEdgeStripsSelective(ctx, c*TS, (FALL_ROWS+r)*TS, t.edges, 0, exposed, alpha);
+    if(selDifficulty!=='hard') drawEdgeStripsSelective(ctx, c*TS, (FALL_ROWS+r)*TS, t.edges, 0, exposed, alpha);
   }
 
   // Falling tile
@@ -941,7 +980,7 @@ function draw(){
     ctx.lineWidth=2; ctx.strokeRect(tx+1,ty+1,TS-2,TS-2);
 
     // Edge colour strips
-    drawEdgeStrips(ctx, tx, ty, t.edges, cur.rotation, 0.9);
+    drawEdgeStrips(ctx, tx, ty, t.edges, cur.rotation, 0.9, HINT_EDGES[selDifficulty]);
   }
 
   // Divider
@@ -956,16 +995,15 @@ function drawRot(ctx,el,x,y,rot){
   ctx.drawImage(el,-TS/2,-TS/2,TS,TS); ctx.restore();
 }
 
-// Draw all 4 edge strips on a tile (used for the falling tile).
-// rot shifts which physical edge gets which colour.
-function drawEdgeStrips(ctx, x, y, edges, rot, alpha){
+// Draw edge strips on a tile. limit controls how many sides are shown (0–4).
+// Order: top, right, bottom, left. rot shifts which physical edge gets which colour.
+function drawEdgeStrips(ctx, x, y, edges, rot, alpha, limit=4){
+  if(limit<=0) return;
   const W=5;
   const rotated=[0,1,2,3].map(i=>edges[(i+4-rot)%4]);
+  const rects=[[x,y,TS,W],[x+TS-W,y,W,TS],[x,y+TS-W,TS,W],[x,y,W,TS]];
   ctx.save(); ctx.globalAlpha=alpha;
-  ctx.fillStyle=rotated[0]; ctx.fillRect(x,    y,        TS, W );  // top
-  ctx.fillStyle=rotated[1]; ctx.fillRect(x+TS-W, y,      W,  TS);  // right
-  ctx.fillStyle=rotated[2]; ctx.fillRect(x,    y+TS-W,   TS, W );  // bottom
-  ctx.fillStyle=rotated[3]; ctx.fillRect(x,    y,        W,  TS);  // left
+  for(let i=0;i<Math.min(limit,4);i++){ctx.fillStyle=rotated[i];ctx.fillRect(...rects[i]);}
   ctx.restore();
 }
 
