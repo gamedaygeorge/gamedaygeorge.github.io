@@ -116,6 +116,25 @@
   .brand-footer a { color:var(--dim); text-decoration:none; transition:color 0.2s; }
   .brand-footer a:hover { color:var(--accent); opacity:1; }
 
+  /* ── TUTORIAL ── */
+  #tutorial-overlay {
+    position:fixed; inset:0; z-index:300;
+    background:rgba(5,10,15,0.92);
+    display:none; align-items:center; justify-content:center; padding:20px;
+  }
+  #tutorial-panel {
+    background:var(--panel); border:1px solid var(--border);
+    max-width:520px; width:100%; padding:32px 36px;
+    display:flex; flex-direction:column; gap:20px;
+    max-height:90vh; overflow-y:auto;
+  }
+  .tut-title { font-family:'Bebas Neue',sans-serif; font-size:30px; letter-spacing:8px; color:var(--accent); text-align:center; text-shadow:0 0 20px rgba(0,212,255,0.3); }
+  .tut-section { display:flex; flex-direction:column; gap:6px; }
+  .tut-heading { font-size:9px; letter-spacing:4px; color:var(--dim); text-transform:uppercase; }
+  .tut-section p { font-size:11px; color:var(--text); line-height:1.9; }
+  .tut-keys { font-size:11px; color:var(--text); line-height:2.4; }
+  .tut-keys span { color:var(--accent2); }
+
   .arena-wrap { display:flex; flex-direction:column; align-items:center; gap:6px; }
   .arena-label { font-family:'Bebas Neue',sans-serif; font-size:11px; letter-spacing:5px; color:var(--dim); }
 
@@ -228,6 +247,8 @@
     </div>
     <button class="btn" onclick="startGame()">LAUNCH MISSION</button>
     <div class="brand-footer">
+      <a href="#" onclick="showTutorial();return false;">How to Play</a>
+      &nbsp;·&nbsp;
       A <a href="https://diamondsky.au/" target="_blank" rel="noopener">Diamond Sky</a> project
       &nbsp;·&nbsp;
       <a href="https://www.linkedin.com/in/georgedyke/" target="_blank" rel="noopener">LinkedIn</a>
@@ -332,6 +353,41 @@
   </div>
 
 </div>
+<!-- TUTORIAL -->
+<div id="tutorial-overlay">
+  <div id="tutorial-panel">
+    <div class="tut-title">MISSION BRIEFING</div>
+
+    <div class="tut-section">
+      <div class="tut-heading">Objective</div>
+      <p>Tiles fall one at a time — each is a slice of a real satellite image. Place every tile in the correct column and rotation to reconstruct the full picture.</p>
+    </div>
+
+    <div class="tut-section">
+      <div class="tut-heading">Edge Hints</div>
+      <p>Coloured strips on tile edges match the edges of their neighbours in the completed image. Use them to work out where — and which way up — each tile belongs. Difficulty controls how many hints are shown: Easy gives you all four sides, Moderate gives two, Hard gives none.</p>
+    </div>
+
+    <div class="tut-section">
+      <div class="tut-heading">Controls</div>
+      <div class="tut-keys">
+        <span>← →</span> &nbsp;Move column &nbsp;&nbsp;
+        <span>↑</span> &nbsp;Rotate tile<br>
+        <span>↓</span> &nbsp;Fall faster &nbsp;&nbsp;&nbsp;&nbsp;
+        <span>SPACE</span> &nbsp;Hard drop<br>
+        <span>ESC</span> &nbsp;Return to menu
+      </div>
+    </div>
+
+    <div class="tut-section">
+      <div class="tut-heading">Scoring</div>
+      <p>A correct placement scores 300 pts. Chain 3 or more in a row for a ×2 streak bonus. Wrong column or rotation deducts points and resets your streak.</p>
+    </div>
+
+    <button class="btn" onclick="closeTutorial()">GOT IT — LAUNCH MISSIONS</button>
+  </div>
+</div>
+
 <div id="flash"></div>
 <div class="msg-overlay" id="msg-overlay"></div>
 
@@ -529,6 +585,7 @@ window.addEventListener('DOMContentLoaded',()=>{
       });
   });
   setGrid(4);
+  if(!localStorage.getItem('orbital-tutorial-seen')) showTutorial();
 });
 
 // ── Real map imagery via OpenStreetMap tiles ──
@@ -636,7 +693,7 @@ function bboxCenter(bbox){
 
 function buildMapsUrl(bbox){
   const {lat,lon} = bboxCenter(bbox);
-  return `https://www.google.com/maps/@${lat},${lon},8z`;
+  return `https://www.openstreetmap.org/#map=8/${lat}/${lon}`;
 }
 
 function buildNASAUrl(imgSize, scene){
@@ -1110,7 +1167,10 @@ function drawEdgeStripsSelective(ctx, x, y, edges, rot, exposed, alpha){
 
 // ── Input ──
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){ backToMenu(); e.preventDefault(); return; }
+  if(e.key==='Escape'){
+    if(document.getElementById('tutorial-overlay').style.display==='flex'){ closeTutorial(); e.preventDefault(); return; }
+    backToMenu(); e.preventDefault(); return;
+  }
   if(!gameRunning||!cur) return;
   if(e.key==='ArrowLeft'){if(cur.col>0){cur.col--;refreshNextPreview();}}
   else if(e.key==='ArrowRight'){if(cur.col<gridN-1){cur.col++;refreshNextPreview();}}
@@ -1150,6 +1210,14 @@ function winGame(){
   const wc=document.getElementById('win-canvas');
   const ws=Math.min(280,window.innerWidth-80); wc.width=wc.height=ws;
   wc.getContext('2d').drawImage(sourceImage,0,0,ws,ws);
+}
+
+function showTutorial(){
+  document.getElementById('tutorial-overlay').style.display='flex';
+}
+function closeTutorial(){
+  document.getElementById('tutorial-overlay').style.display='none';
+  localStorage.setItem('orbital-tutorial-seen','1');
 }
 
 function backToMenu(){
