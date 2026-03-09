@@ -89,6 +89,19 @@
   .btn.sm { padding: 10px 20px; font-size: 11px; }
   .btn.active { background: var(--accent); color: var(--bg); }
 
+  /* ── Touch controls ── */
+  .touch-btn {
+    background: var(--panel); border: 2px solid var(--border); color: var(--accent);
+    font-family: 'Space Mono', monospace; font-size: 14px; letter-spacing: 2px;
+    padding: 14px 20px; cursor: pointer; border-radius: 4px;
+    -webkit-tap-highlight-color: transparent; user-select: none;
+    transition: background 0.1s, border-color 0.1s; min-width: 72px;
+    touch-action: manipulation;
+  }
+  .touch-btn:active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  .touch-drop { min-width: 200px; border-color: var(--accent2); color: var(--accent2); }
+  .touch-drop:active { background: var(--accent2); color: var(--bg); border-color: var(--accent2); }
+
   /* ── GAME ── */
   #game-screen { display: none; }
 
@@ -194,6 +207,43 @@
     text-shadow: 0 0 20px currentColor;
   }
   .msg-overlay.show { opacity:1; }
+
+  /* ── Score links ── */
+  .best-score-sub a, .history-table td a { color:inherit; text-decoration:none; transition:color 0.2s; }
+  .best-score-sub a:hover, .history-table td a:hover { color:var(--accent); }
+
+  /* ── Mobile ── */
+  @media (max-width: 700px) {
+    .game-layout { display:flex; flex-direction:column; gap:8px; }
+
+    /* Stats: horizontal row of compact boxes */
+    .game-layout > .hud-col:first-child { order:1; flex-direction:row; flex-wrap:wrap; gap:6px; padding-top:0; }
+    .game-layout > .hud-col:first-child .hud-box { flex:1 1 calc(50% - 3px); min-width:70px; padding:6px 8px; }
+    .game-layout > .hud-col:first-child .hud-value { font-size:20px; }
+    .game-layout > .hud-col:first-child .hud-value.sm { font-size:16px; }
+
+    /* Ref image + next tile: side by side, hide controls/queue */
+    .game-layout > .hud-col:last-child { order:2; flex-direction:row; gap:8px; align-items:flex-start; }
+    .game-layout > .hud-col:last-child .hud-box:nth-child(n+3) { display:none; }
+    #ref-canvas { width:80px !important; height:80px !important; }
+    #next-canvas { width:64px !important; height:64px !important; }
+
+    /* Canvas */
+    .arena-wrap { order:3; width:100%; }
+    .scene-name { font-size:12px; letter-spacing:2px; }
+    .scene-meta { font-size:8px; }
+
+    /* Touch controls */
+    #touch-controls { display:flex !important; order:4; }
+
+    /* Menu */
+    .imagery-grid { gap:6px; max-width:100%; }
+    .grid-btns { flex-wrap:wrap; justify-content:center; gap:6px; }
+    .btn.sm { padding:8px 14px; font-size:10px; letter-spacing:1px; }
+    .imagery-option .opt-label { font-size:8px; letter-spacing:1px; padding:4px 6px; }
+    #menu-screen > .btn:not(.sm) { width:100%; padding:14px 0; }
+    .menu-section-desc { max-width:100%; padding:0 8px; }
+  }
 </style>
 </head>
 <body>
@@ -307,11 +357,21 @@
           <div class="scene-links">
             <a id="maps-link" href="#" target="_blank" rel="noopener">Maps ↗</a>
             <a id="img-link" href="#" target="_blank" rel="noopener" style="display:none">View ↗</a>
+            <a id="raw-link" href="#" target="_blank" rel="noopener" style="display:none">Image ↗</a>
           </div>
         </div>
         <canvas id="game-canvas"></canvas>
         <div class="progress-bar-wrap">
           <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+        </div>
+        <!-- Touch controls: hidden on desktop, shown on mobile via CSS -->
+        <div id="touch-controls" style="display:none; flex-direction:column; align-items:center; gap:8px; width:100%; padding:8px 0;">
+          <div style="display:flex; gap:10px; justify-content:center; width:100%;">
+            <button class="touch-btn" id="touch-left"   aria-label="Move Left">←</button>
+            <button class="touch-btn" id="touch-rotate" aria-label="Rotate">↺ Rotate</button>
+            <button class="touch-btn" id="touch-right"  aria-label="Move Right">→</button>
+          </div>
+          <button class="touch-btn touch-drop" id="touch-drop" aria-label="Hard Drop">▼ DROP</button>
         </div>
       </div>
 
@@ -356,6 +416,7 @@
       <div class="scene-links">
         <a id="win-maps-link" href="#" target="_blank" rel="noopener">Maps ↗</a>
         <a id="win-img-link" href="#" target="_blank" rel="noopener" style="display:none">View ↗</a>
+        <a id="win-raw-link" href="#" target="_blank" rel="noopener" style="display:none">Image ↗</a>
       </div>
     </div>
     <div class="win-stats" id="win-stats"></div>
@@ -686,7 +747,8 @@ async function fetchOSMImage(imgSize, scene){
 let TS = 64;
 let currentSceneName = '';
 let currentScene = null;
-let currentImageUrl = '';
+let currentImageUrl = '';    // viewer URL (NASA Worldview / Copernicus / OSM map)
+let currentRawImageUrl = ''; // direct image URL (WMS JPEG etc.)
 let currentImageDate = '';
 let selSpeed = 'normal';
 let baseFallInterval = 1800;
@@ -738,14 +800,19 @@ function buildESAViewerUrl(scene){
     `&themeId=DEFAULT-THEME&datasetId=S2_L2A_CDAS`;
 }
 
-function populateSceneInfo(nameId, metaId, mapsId, imgId){
+function populateSceneInfo(nameId, metaId, mapsId, viewId, rawId){
   document.getElementById(nameId).textContent = currentSceneName.toUpperCase();
   document.getElementById(metaId).textContent =
     currentScene.type + '  •  ' + formatLatLon(currentScene.bbox) + '  •  ' + currentImageDate;
   document.getElementById(mapsId).href = buildMapsUrl(currentScene.bbox);
-  const imgEl = document.getElementById(imgId);
-  if(currentImageUrl){ imgEl.href = currentImageUrl; imgEl.style.display = ''; }
-  else { imgEl.style.display = 'none'; }
+  const viewEl = document.getElementById(viewId);
+  if(currentImageUrl){ viewEl.href = currentImageUrl; viewEl.style.display = ''; }
+  else { viewEl.style.display = 'none'; }
+  const rawEl = document.getElementById(rawId);
+  if(rawEl){
+    if(currentRawImageUrl){ rawEl.href = currentRawImageUrl; rawEl.style.display = ''; }
+    else { rawEl.style.display = 'none'; }
+  }
 }
 
 function buildOSMUrl(bbox){
@@ -776,11 +843,20 @@ async function startGame(){
   lockedCount=0; score=0; streak=0; misses=0; startTime=Date.now();
   baseFallInterval = SPEED_MAP[selSpeed]; fallInterval = baseFallInterval;
 
-  const availH = window.innerHeight - 80;
-  const availW = window.innerWidth - 150*2 - 16*2 - 32;
+  const isMobile = window.innerWidth <= 700;
+  const availH = isMobile ? window.innerHeight - 280 : window.innerHeight - 80;
+  const availW = isMobile ? window.innerWidth - 24   : window.innerWidth - 160*2 - 20*2 - 32;
   const maxByHeight = Math.floor(availH / (gridN + FALL_ROWS));
   const maxByWidth  = Math.floor(availW / gridN);
   TS = Math.max(32, Math.min(96, maxByHeight, maxByWidth));
+  // On mobile shrink the next-tile preview canvas to match
+  if(isMobile){
+    const nc = document.getElementById('next-canvas');
+    nc.width = 64; nc.height = 64;
+  } else {
+    const nc = document.getElementById('next-canvas');
+    nc.width = 140; nc.height = 140;
+  }
   tileSize=TS;
   const imgSize=gridN*TS;
 
@@ -802,18 +878,19 @@ async function startGame(){
       sourceImage = await fetchNASAImage(imgSize, nasaScene);
       currentSceneName = nasaScene.name;
       currentImageUrl = buildNASAViewerUrl(nasaScene);
+      currentRawImageUrl = buildNASAUrl(imgSize, nasaScene);
       console.log('[ORBITAL] NASA success:', nasaScene.name);
     } catch(e) {
       console.warn('[ORBITAL] NASA failed:', e.message, '— trying OSM');
       try {
         sourceImage = await fetchOSMImage(imgSize, osmScene);
         currentSceneName = osmScene.name;
-        currentImageUrl = buildOSMUrl(nasaScene.bbox);
+        currentImageUrl = buildOSMUrl(nasaScene.bbox); currentRawImageUrl = '';
         console.log('[ORBITAL] OSM fallback success');
       } catch(e2) {
         console.warn('[ORBITAL] OSM failed:', e2.message, '— using procedural');
         sourceImage = genNASA(imgSize);
-        currentSceneName = nasaScene.name + ' (procedural)';
+        currentSceneName = nasaScene.name + ' (procedural)'; currentRawImageUrl = '';
       }
     }
   } else if(selSource === 'esa'){
@@ -821,18 +898,19 @@ async function startGame(){
       sourceImage = await fetchESAImage(imgSize, nasaScene);
       currentSceneName = nasaScene.name;
       currentImageUrl = buildESAViewerUrl(nasaScene);
+      currentRawImageUrl = buildESAUrl(imgSize, nasaScene);
       console.log('[ORBITAL] ESA success:', nasaScene.name);
     } catch(e) {
       console.warn('[ORBITAL] ESA failed:', e.message, '— trying OSM');
       try {
         sourceImage = await fetchOSMImage(imgSize, osmScene);
         currentSceneName = osmScene.name;
-        currentImageUrl = buildOSMUrl(nasaScene.bbox);
+        currentImageUrl = buildOSMUrl(nasaScene.bbox); currentRawImageUrl = '';
         console.log('[ORBITAL] OSM fallback success');
       } catch(e2) {
         console.warn('[ORBITAL] OSM failed:', e2.message, '— using procedural');
         sourceImage = genNASA(imgSize);
-        currentSceneName = nasaScene.name + ' (procedural)';
+        currentSceneName = nasaScene.name + ' (procedural)'; currentRawImageUrl = '';
       }
     }
   } else {
@@ -852,7 +930,7 @@ async function startGame(){
   document.getElementById('loading-screen').style.display='none';
   document.getElementById('game-screen').style.display='block';
 
-  populateSceneInfo('scene-name-disp','scene-meta-disp','maps-link','img-link');
+  populateSceneInfo('scene-name-disp','scene-meta-disp','maps-link','img-link','raw-link');
 
   // Slice tiles + compute edge colours
   tiles=[]; locked=Array.from({length:gridN},()=>Array(gridN).fill(false));
@@ -936,7 +1014,7 @@ function spawnTile(){
 
 function refreshNextPreview(){
   const c=document.getElementById('next-canvas');
-  const SZ=140;
+  const SZ=c.width; // respects any runtime resize
   const ctx=c.getContext('2d'); ctx.clearRect(0,0,SZ,SZ);
   if(!cur) return;
   const t=tiles[cur.tileIdx];
@@ -1200,6 +1278,44 @@ document.addEventListener('keydown',e=>{
 });
 document.addEventListener('keyup',e=>{if(e.key==='ArrowDown')fallInterval=baseFallInterval;});
 
+// ── Touch controls ──
+(function(){
+  function onBtn(id, action){
+    const el=document.getElementById(id); if(!el) return;
+    el.addEventListener('touchstart', e=>{ e.preventDefault(); action(); }, {passive:false});
+    el.addEventListener('mousedown',  e=>{ e.preventDefault(); action(); });
+  }
+  onBtn('touch-left',   ()=>{ if(gameRunning&&cur&&cur.col>0)      { cur.col--; refreshNextPreview(); }});
+  onBtn('touch-right',  ()=>{ if(gameRunning&&cur&&cur.col<gridN-1){ cur.col++; refreshNextPreview(); }});
+  onBtn('touch-rotate', ()=>{ if(gameRunning&&cur){ cur.rotation=(cur.rotation+1)%4; refreshNextPreview(); }});
+  onBtn('touch-drop',   ()=>{ if(gameRunning&&cur) doLand(); });
+
+  // Canvas swipe/tap
+  const canvas=document.getElementById('game-canvas');
+  let t0x,t0y,t0time;
+  const SWIPE=30, DROP=80, TAP=12;
+  canvas.addEventListener('touchstart', e=>{
+    if(e.touches.length!==1) return;
+    t0x=e.touches[0].clientX; t0y=e.touches[0].clientY; t0time=Date.now();
+    e.preventDefault();
+  }, {passive:false});
+  canvas.addEventListener('touchend', e=>{
+    if(!gameRunning||!cur) return;
+    const dx=e.changedTouches[0].clientX-t0x, dy=e.changedTouches[0].clientY-t0y;
+    const adx=Math.abs(dx), ady=Math.abs(dy);
+    if(Math.sqrt(dx*dx+dy*dy)<TAP){
+      cur.rotation=(cur.rotation+1)%4; refreshNextPreview();
+    } else if(ady>DROP&&ady>adx*1.5&&dy>0){
+      doLand();
+    } else if(adx>SWIPE&&adx>ady){
+      if(dx<0&&cur.col>0)          { cur.col--; refreshNextPreview(); }
+      else if(dx>0&&cur.col<gridN-1){ cur.col++; refreshNextPreview(); }
+    }
+    e.preventDefault();
+  }, {passive:false});
+  canvas.addEventListener('touchmove', e=>e.preventDefault(), {passive:false});
+})();
+
 // ── HUD ──
 function updateHUD(){
   document.getElementById('score-disp').textContent=score;
@@ -1223,9 +1339,9 @@ function winGame(){
   gameRunning=false;
   document.getElementById('game-screen').style.display='none';
   document.getElementById('win-screen').style.display='flex';
-  populateSceneInfo('win-scene-name','win-scene-meta','win-maps-link','win-img-link');
+  populateSceneInfo('win-scene-name','win-scene-meta','win-maps-link','win-img-link','win-raw-link');
   const elapsed = Math.floor((Date.now()-startTime)/1000);
-  saveScore({ date:new Date().toISOString().slice(0,10), sceneName:currentSceneName, gridN, difficulty:selDifficulty, source:selSource, score, time:elapsed, misses });
+  saveScore({ date:new Date().toISOString().slice(0,10), sceneName:currentSceneName, gridN, difficulty:selDifficulty, source:selSource, score, time:elapsed, misses, imageUrl:currentImageUrl, mapsUrl:buildMapsUrl(currentScene.bbox) });
   renderHistory();
   renderBestScore();
   document.getElementById('win-stats').innerHTML=
@@ -1256,10 +1372,13 @@ function renderBestScore(){
   const scores = loadScores();
   if(!scores.length){ el.innerHTML=''; return; }
   const best = scores.reduce((b,s)=>s.score>b.score?s:b, scores[0]);
+  const bestNameHtml = best.imageUrl
+    ? `<a href="${best.imageUrl}" target="_blank" rel="noopener">${best.sceneName} ↗</a>`
+    : best.sceneName;
   el.innerHTML = `<div class="best-score-wrap">
     <div class="best-score-label">Best Score</div>
     <div class="best-score-value">${best.score}</div>
-    <div class="best-score-sub">${best.sceneName} &nbsp;·&nbsp; ${best.gridN}×${best.gridN} &nbsp;·&nbsp; ${best.difficulty}</div>
+    <div class="best-score-sub">${bestNameHtml} &nbsp;·&nbsp; ${best.gridN}×${best.gridN} &nbsp;·&nbsp; ${best.difficulty}</div>
   </div>`;
 }
 
@@ -1272,7 +1391,10 @@ function renderHistory(){
   const rows = scores.map(s=>{
     const t=`${Math.floor(s.time/60)}m ${String(s.time%60).padStart(2,'0')}s`;
     const hi = s===best ? ' class="hi"' : '';
-    return `<tr${hi}><td>${s.date}</td><td>${s.sceneName}</td><td>${s.gridN}×${s.gridN}</td><td>${s.difficulty}</td><td>${s.source.toUpperCase()}</td><td>${s.score}</td><td>${t}</td><td>${s.misses}</td></tr>`;
+    const nameCell = s.imageUrl
+      ? `<a href="${s.imageUrl}" target="_blank" rel="noopener">${s.sceneName} ↗</a>`
+      : s.sceneName;
+    return `<tr${hi}><td>${s.date}</td><td>${nameCell}</td><td>${s.gridN}×${s.gridN}</td><td>${s.difficulty}</td><td>${s.source.toUpperCase()}</td><td>${s.score}</td><td>${t}</td><td>${s.misses}</td></tr>`;
   }).join('');
   el.innerHTML = `<table class="history-table"><thead><tr>
     <th>Date</th><th>Location</th><th>Grid</th><th>Diff</th><th>Source</th><th>Score</th><th>Time</th><th>Misses</th>
