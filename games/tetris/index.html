@@ -1,0 +1,1422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORBITAL — Satellite Tile Puzzle</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Bebas+Neue&display=swap');
+
+  :root {
+    --bg: #050a0f;
+    --panel: #0a1520;
+    --border: #1a3a5c;
+    --accent: #00d4ff;
+    --accent2: #ff6b35;
+    --text: #c8e6f0;
+    --dim: #3a6080;
+    --correct: #00ff88;
+    --wrong: #ff4444;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      radial-gradient(1px 1px at 20% 30%, rgba(255,255,255,0.4) 0%, transparent 100%),
+      radial-gradient(1px 1px at 80% 10%, rgba(255,255,255,0.3) 0%, transparent 100%),
+      radial-gradient(1px 1px at 50% 60%, rgba(255,255,255,0.3) 0%, transparent 100%),
+      radial-gradient(1px 1px at 10% 80%, rgba(255,255,255,0.2) 0%, transparent 100%),
+      radial-gradient(1px 1px at 90% 70%, rgba(255,255,255,0.2) 0%, transparent 100%),
+      radial-gradient(2px 2px at 35% 15%, rgba(0,212,255,0.3) 0%, transparent 100%),
+      radial-gradient(2px 2px at 65% 85%, rgba(0,212,255,0.2) 0%, transparent 100%);
+    pointer-events: none; z-index: 0;
+  }
+
+  #app { position: relative; z-index: 1; width: 100%; max-width: 1200px; padding: 10px; }
+
+  /* ── MENU ── */
+  #menu-screen { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 20px 0; }
+
+  .logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(48px, 10vw, 88px);
+    letter-spacing: 12px;
+    color: var(--accent);
+    text-shadow: 0 0 40px rgba(0,212,255,0.5), 0 0 80px rgba(0,212,255,0.2);
+    line-height: 1;
+  }
+  .logo-sub { font-size: 11px; letter-spacing: 6px; color: var(--dim); text-transform: uppercase; margin-top: -14px; }
+
+  .menu-section-title { font-size: 10px; letter-spacing: 4px; color: var(--dim); text-transform: uppercase; text-align: center; margin-bottom: 10px; }
+  .menu-section-desc { font-size: 10px; color: var(--dim); text-align: center; margin-top: 8px; opacity: 0.7; max-width: 340px; }
+
+  .imagery-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; width: 100%; max-width: 480px; }
+
+  .imagery-option {
+    cursor: pointer; border: 2px solid var(--border); border-radius: 4px; overflow: hidden;
+    transition: border-color 0.2s, transform 0.2s; position: relative;
+  }
+  .imagery-option:hover { border-color: var(--dim); transform: translateY(-2px); }
+  .imagery-option.selected { border-color: var(--accent); }
+  .imagery-option.selected::after { content:'✓'; position:absolute; top:6px; right:8px; color:var(--accent); font-size:14px; font-weight:bold; }
+  .imagery-option canvas { display:block; width:100%; aspect-ratio:1; }
+  .imagery-option .opt-label { padding:6px 8px; font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--dim); background:var(--panel); text-align:center; }
+
+  .grid-btns { display:flex; gap:10px; justify-content:center; }
+
+  .btn {
+    background: transparent; border: 2px solid var(--accent); color: var(--accent);
+    font-family: 'Space Mono', monospace; font-size: 13px; letter-spacing: 4px;
+    text-transform: uppercase; padding: 14px 48px; cursor: pointer;
+    transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+  }
+  .btn:hover { background: var(--accent); color: var(--bg); box-shadow: 0 0 30px rgba(0,212,255,0.4); }
+  .btn.sm { padding: 10px 20px; font-size: 11px; }
+  .btn.active { background: var(--accent); color: var(--bg); }
+
+  /* ── Touch controls ── */
+  .touch-btn {
+    background: var(--panel); border: 2px solid var(--border); color: var(--accent);
+    font-family: 'Space Mono', monospace; font-size: 14px; letter-spacing: 2px;
+    padding: 14px 20px; cursor: pointer; border-radius: 4px;
+    -webkit-tap-highlight-color: transparent; user-select: none;
+    transition: background 0.1s, border-color 0.1s; min-width: 72px;
+    touch-action: manipulation;
+  }
+  .touch-btn:active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  .touch-drop { min-width: 200px; border-color: var(--accent2); color: var(--accent2); }
+  .touch-drop:active { background: var(--accent2); color: var(--bg); border-color: var(--accent2); }
+
+  /* ── GAME ── */
+  #game-screen { display: none; }
+
+  .game-layout { display: grid; grid-template-columns: 160px auto 200px; gap: 20px; align-items: start; }
+
+  .hud-col { display:flex; flex-direction:column; gap:12px; padding-top:4px; }
+
+  .hud-box { border:1px solid var(--border); padding:10px 12px; background:var(--panel); }
+  .hud-label { font-size:9px; letter-spacing:3px; color:var(--dim); text-transform:uppercase; margin-bottom:5px; }
+  .hud-value { font-family:'Bebas Neue',sans-serif; font-size:28px; color:var(--accent); letter-spacing:2px; line-height:1; }
+  .hud-value.sm { font-size:18px; }
+  .hud-value.warn { color: var(--accent2); }
+
+  .controls-info { font-size:9px; letter-spacing:1px; color:var(--dim); line-height:2.2; }
+  .controls-info span { color:var(--accent2); }
+
+  .scene-info { text-align:center; line-height:1.6; }
+  .scene-name { font-family:'Bebas Neue',sans-serif; font-size:15px; letter-spacing:4px; color:var(--accent); }
+  .scene-meta { font-size:9px; letter-spacing:2px; color:var(--dim); }
+  .scene-links { display:flex; gap:12px; justify-content:center; margin-top:4px; }
+  .scene-links a { font-size:9px; letter-spacing:2px; color:var(--dim); text-decoration:none; transition:color 0.2s; }
+  .scene-links a:hover { color:var(--accent); }
+
+  /* ── SCORES ── */
+  .best-score-wrap { text-align:center; }
+  .best-score-label { font-size:9px; letter-spacing:3px; color:var(--dim); text-transform:uppercase; }
+  .best-score-value { font-family:'Bebas Neue',sans-serif; font-size:36px; color:var(--accent); letter-spacing:2px; line-height:1.1; }
+  .best-score-sub { font-size:9px; color:var(--dim); letter-spacing:1px; margin-top:2px; }
+
+  .history-wrap { width:100%; max-width:640px; }
+  .history-title { font-size:9px; letter-spacing:3px; color:var(--dim); text-transform:uppercase; margin-bottom:8px; text-align:center; }
+  .history-scroll { overflow-x:auto; }
+  .history-table { width:100%; border-collapse:collapse; font-size:9px; letter-spacing:1px; white-space:nowrap; }
+  .history-table th { color:var(--dim); text-transform:uppercase; letter-spacing:2px; padding:5px 10px; border-bottom:1px solid var(--border); text-align:left; }
+  .history-table td { color:var(--text); padding:5px 10px; border-bottom:1px solid rgba(26,58,92,0.3); }
+  .history-table tr.hi td { color:var(--accent); }
+
+  .brand-footer { font-size:9px; letter-spacing:2px; color:var(--dim); text-align:center; opacity:0.6; }
+  .brand-footer a { color:var(--dim); text-decoration:none; transition:color 0.2s; }
+  .brand-footer a:hover { color:var(--accent); opacity:1; }
+
+  /* ── TUTORIAL ── */
+  #tutorial-overlay {
+    position:fixed; inset:0; z-index:300;
+    background:rgba(5,10,15,0.92);
+    display:none; align-items:center; justify-content:center; padding:20px;
+  }
+  #tutorial-panel {
+    background:var(--panel); border:1px solid var(--border);
+    max-width:520px; width:100%; padding:32px 36px;
+    display:flex; flex-direction:column; gap:20px;
+    max-height:90vh; overflow-y:auto;
+  }
+  .tut-title { font-family:'Bebas Neue',sans-serif; font-size:30px; letter-spacing:8px; color:var(--accent); text-align:center; text-shadow:0 0 20px rgba(0,212,255,0.3); }
+  .tut-section { display:flex; flex-direction:column; gap:6px; }
+  .tut-heading { font-size:9px; letter-spacing:4px; color:var(--dim); text-transform:uppercase; }
+  .tut-section p { font-size:11px; color:var(--text); line-height:1.9; }
+  .tut-keys { font-size:11px; color:var(--text); line-height:2.4; }
+  .tut-keys span { color:var(--accent2); }
+
+  .arena-wrap { display:flex; flex-direction:column; align-items:center; gap:6px; }
+  .arena-label { font-family:'Bebas Neue',sans-serif; font-size:11px; letter-spacing:5px; color:var(--dim); }
+
+  #game-canvas { image-rendering:pixelated; border:1px solid var(--border); display:block; box-shadow:0 0 40px rgba(0,212,255,0.08); }
+
+  .progress-bar-wrap { width:100%; height:3px; background:var(--border); }
+  .progress-bar-fill { height:100%; background:var(--accent); transition:width 0.4s; box-shadow:0 0 8px var(--accent); }
+
+  #ref-canvas { image-rendering:pixelated; display:block; border:1px solid var(--border); width:100%; aspect-ratio:1; }
+  .ref-wrap { position:relative; }
+  .ref-highlight { position:absolute; border:2px solid var(--accent); box-sizing:border-box; pointer-events:none; transition: all 0.15s; box-shadow: 0 0 8px var(--accent); }
+
+  #loading-screen {
+    display:none; flex-direction:column; align-items:center; justify-content:center;
+    gap:20px; min-height:200px;
+  }
+  .loading-title { font-family:'Bebas Neue',sans-serif; font-size:32px; letter-spacing:8px; color:var(--accent); }
+  .loading-sub { font-size:10px; letter-spacing:3px; color:var(--dim); }
+  .loading-bar-wrap { width:200px; height:2px; background:var(--border); }
+  .loading-bar { height:100%; background:var(--accent); box-shadow:0 0 8px var(--accent); animation: loadpulse 1.2s ease-in-out infinite; }
+  @keyframes loadpulse { 0%{width:0%} 50%{width:80%} 100%{width:100%} }
+
+  #pool-display { display:flex; flex-wrap:wrap; gap:3px; }
+  .pool-dot { width:8px; height:8px; border-radius:50%; background:var(--dim); }
+  .pool-dot.cur { background:var(--accent); box-shadow:0 0 5px var(--accent); }
+
+  /* ── WIN ── */
+  #win-screen { display:none; flex-direction:column; align-items:center; gap:20px; text-align:center; }
+  .win-title { font-family:'Bebas Neue',sans-serif; font-size:64px; letter-spacing:10px; color:var(--correct); text-shadow:0 0 40px rgba(0,255,136,0.5); }
+  .win-stats { color:var(--dim); font-size:11px; letter-spacing:2px; line-height:2.5; }
+  .win-stats strong { color:var(--text); }
+  #win-canvas { border:2px solid var(--correct); box-shadow:0 0 40px rgba(0,255,136,0.2); image-rendering:pixelated; }
+
+  /* FX */
+  #flash { position:fixed; inset:0; pointer-events:none; z-index:100; opacity:0; transition:opacity 0.08s; }
+  #flash.correct { background:rgba(0,255,136,0.12); }
+  #flash.wrong { background:rgba(255,68,68,0.12); }
+
+  .msg-overlay {
+    position:fixed; top:38%; left:50%; transform:translate(-50%,-50%);
+    font-family:'Bebas Neue',sans-serif; font-size:52px; letter-spacing:6px;
+    pointer-events:none; z-index:200; opacity:0; transition:opacity 0.15s;
+    text-shadow: 0 0 20px currentColor;
+  }
+  .msg-overlay.show { opacity:1; }
+
+  /* ── Score links ── */
+  .best-score-sub a, .history-table td a { color:inherit; text-decoration:none; transition:color 0.2s; }
+  .best-score-sub a:hover, .history-table td a:hover { color:var(--accent); }
+
+  /* ── Mobile ── */
+  @media (max-width: 700px) {
+    .game-layout { display:flex; flex-direction:column; gap:8px; }
+
+    /* Stats: horizontal row of compact boxes */
+    .game-layout > .hud-col:first-child { order:1; flex-direction:row; flex-wrap:wrap; gap:6px; padding-top:0; }
+    .game-layout > .hud-col:first-child .hud-box { flex:1 1 calc(50% - 3px); min-width:70px; padding:6px 8px; }
+    .game-layout > .hud-col:first-child .hud-value { font-size:20px; }
+    .game-layout > .hud-col:first-child .hud-value.sm { font-size:16px; }
+
+    /* Ref image + next tile: side by side, hide controls/queue */
+    .game-layout > .hud-col:last-child { order:2; flex-direction:row; gap:8px; align-items:flex-start; }
+    .game-layout > .hud-col:last-child .hud-box:nth-child(n+3) { display:none; }
+    #ref-canvas { width:80px !important; height:80px !important; }
+    #next-canvas { width:64px !important; height:64px !important; }
+
+    /* Canvas */
+    .arena-wrap { order:3; width:100%; }
+    .scene-name { font-size:12px; letter-spacing:2px; }
+    .scene-meta { font-size:8px; }
+
+    /* Touch controls */
+    #touch-controls { display:flex !important; order:4; }
+
+    /* Menu */
+    .imagery-grid { gap:6px; max-width:100%; }
+    .grid-btns { flex-wrap:wrap; justify-content:center; gap:6px; }
+    .btn.sm { padding:8px 14px; font-size:10px; letter-spacing:1px; }
+    .imagery-option .opt-label { font-size:8px; letter-spacing:1px; padding:4px 6px; }
+    #menu-screen > .btn:not(.sm) { width:100%; padding:14px 0; }
+    .menu-section-desc { max-width:100%; padding:0 8px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- MENU -->
+  <div id="menu-screen">
+    <div>
+      <div class="logo">ORBITAL</div>
+      <div class="logo-sub">Satellite Tile Puzzle</div>
+    </div>
+    <div id="best-score-disp"></div>
+    <div>
+      <div class="menu-section-title">Scene Type</div>
+      <div class="imagery-grid">
+        <div class="imagery-option selected" data-type="nasa" onclick="selectImagery(this)">
+          <canvas id="prev-nasa" width="120" height="120"></canvas>
+          <div class="opt-label">Tropical</div>
+        </div>
+        <div class="imagery-option" data-type="city" onclick="selectImagery(this)">
+          <canvas id="prev-city" width="120" height="120"></canvas>
+          <div class="opt-label">Arid</div>
+        </div>
+        <div class="imagery-option" data-type="ocean" onclick="selectImagery(this)">
+          <canvas id="prev-ocean" width="120" height="120"></canvas>
+          <div class="opt-label">Coastal</div>
+        </div>
+      </div>
+      <div class="menu-section-desc">Browse landscape styles — a random location is chosen each mission.</div>
+    </div>
+    <div>
+      <div class="menu-section-title">Data Source</div>
+      <div class="grid-btns">
+        <button class="btn sm active" onclick="setSource('nasa')" id="src-nasa">NASA</button>
+        <button class="btn sm" onclick="setSource('esa')" id="src-esa">ESA</button>
+        <button class="btn sm" onclick="setSource('osm')" id="src-osm">OSM</button>
+      </div>
+      <div class="menu-section-desc">NASA MODIS and ESA Sentinel-2 fetch real satellite imagery. OSM uses map tiles.</div>
+    </div>
+    <div>
+      <div class="menu-section-title">Grid Size</div>
+      <div class="grid-btns">
+        <button class="btn sm" onclick="setGrid(3)" id="grid-3">3×3</button>
+        <button class="btn sm active" onclick="setGrid(4)" id="grid-4">4×4</button>
+        <button class="btn sm" onclick="setGrid(5)" id="grid-5">5×5</button>
+      </div>
+      <div class="menu-section-desc">Larger grids mean more pieces and a longer puzzle.</div>
+    </div>
+    <div>
+      <div class="menu-section-title">Difficulty</div>
+      <div class="grid-btns">
+        <button class="btn sm active" onclick="setDifficulty('easy')" id="diff-easy">Easy</button>
+        <button class="btn sm" onclick="setDifficulty('moderate')" id="diff-moderate">Moderate</button>
+        <button class="btn sm" onclick="setDifficulty('hard')" id="diff-hard">Hard</button>
+      </div>
+      <div class="menu-section-desc">Easy shows all four colour edge hints. Moderate shows two. Hard shows none.</div>
+    </div>
+    <div>
+      <div class="menu-section-title">Fall Speed</div>
+      <div class="grid-btns">
+        <button class="btn sm" onclick="setSpeed('slow')" id="speed-slow">Slow</button>
+        <button class="btn sm active" onclick="setSpeed('normal')" id="speed-normal">Normal</button>
+        <button class="btn sm" onclick="setSpeed('fast')" id="speed-fast">Fast</button>
+      </div>
+      <div class="menu-section-desc">How quickly tiles descend. Hold ↓ to drop faster mid-game.</div>
+    </div>
+    <button class="btn" onclick="startGame()">LAUNCH MISSION</button>
+    <div class="brand-footer">
+      <a href="#" onclick="showTutorial();return false;">How to Play</a>
+      &nbsp;·&nbsp;
+      A <a href="https://diamondsky.au/" target="_blank" rel="noopener">Diamond Sky</a> project
+      &nbsp;·&nbsp;
+      <a href="https://www.linkedin.com/in/georgedyke/" target="_blank" rel="noopener">LinkedIn</a>
+    </div>
+  </div>
+
+  <!-- LOADING -->
+  <div id="loading-screen">
+    <div class="loading-title">ACQUIRING SIGNAL</div>
+    <div class="loading-sub" id="loading-sub">Fetching satellite imagery…</div>
+    <div class="loading-bar-wrap"><div class="loading-bar"></div></div>
+  </div>
+
+  <!-- GAME -->
+  <div id="game-screen">
+    <div class="game-layout">
+
+      <div class="hud-col">
+        <div class="hud-box">
+          <div class="hud-label">Score</div>
+          <div class="hud-value" id="score-disp">0</div>
+        </div>
+        <div class="hud-box">
+          <div class="hud-label">Placed</div>
+          <div class="hud-value sm" id="placed-disp">0/16</div>
+        </div>
+        <div class="hud-box">
+          <div class="hud-label">Streak</div>
+          <div class="hud-value sm" id="streak-disp">0</div>
+        </div>
+        <div class="hud-box">
+          <div class="hud-label">Misses</div>
+          <div class="hud-value sm warn" id="miss-disp">0</div>
+        </div>
+      </div>
+
+      <div class="arena-wrap">
+        <div class="scene-info">
+          <div class="scene-name" id="scene-name-disp">—</div>
+          <div class="scene-meta" id="scene-meta-disp">—</div>
+          <div class="scene-links">
+            <a id="maps-link" href="#" target="_blank" rel="noopener">Maps ↗</a>
+            <a id="img-link" href="#" target="_blank" rel="noopener" style="display:none">View ↗</a>
+            <a id="raw-link" href="#" target="_blank" rel="noopener" style="display:none">Image ↗</a>
+          </div>
+        </div>
+        <canvas id="game-canvas"></canvas>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+        </div>
+        <!-- Touch controls: hidden on desktop, shown on mobile via CSS -->
+        <div id="touch-controls" style="display:none; flex-direction:column; align-items:center; gap:8px; width:100%; padding:8px 0;">
+          <div style="display:flex; gap:10px; justify-content:center; width:100%;">
+            <button class="touch-btn" id="touch-left"   aria-label="Move Left">←</button>
+            <button class="touch-btn" id="touch-rotate" aria-label="Rotate">↺ Rotate</button>
+            <button class="touch-btn" id="touch-right"  aria-label="Move Right">→</button>
+          </div>
+          <button class="touch-btn touch-drop" id="touch-drop" aria-label="Hard Drop">▼ DROP</button>
+        </div>
+      </div>
+
+      <div class="hud-col">
+        <div class="hud-box">
+          <div class="hud-label">Target Image</div>
+          <div class="ref-wrap">
+            <canvas id="ref-canvas" width="180" height="180"></canvas>
+            <div class="ref-highlight" id="ref-highlight" style="display:none"></div>
+          </div>
+        </div>
+        <div class="hud-box">
+          <div class="hud-label">Falling</div>
+          <canvas id="next-canvas" width="140" height="140" style="image-rendering:pixelated;display:block;"></canvas>
+        </div>
+        <div class="hud-box">
+          <div class="hud-label">Controls</div>
+          <div class="controls-info">
+            <span>← →</span> Move<br>
+            <span>↑</span> Rotate<br>
+            <span>↓</span> Faster<br>
+            <span>SPACE</span> Drop<br>
+            <span>ESC</span> Menu
+          </div>
+        </div>
+        <div class="hud-box">
+          <div class="hud-label">Queue (<span id="pool-count">0</span>)</div>
+          <div id="pool-display"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- WIN -->
+  <div id="win-screen">
+    <div class="win-title">MISSION COMPLETE</div>
+    <canvas id="win-canvas"></canvas>
+    <div class="scene-info" style="margin-top:8px;">
+      <div class="scene-name" id="win-scene-name">—</div>
+      <div class="scene-meta" id="win-scene-meta">—</div>
+      <div class="scene-links">
+        <a id="win-maps-link" href="#" target="_blank" rel="noopener">Maps ↗</a>
+        <a id="win-img-link" href="#" target="_blank" rel="noopener" style="display:none">View ↗</a>
+        <a id="win-raw-link" href="#" target="_blank" rel="noopener" style="display:none">Image ↗</a>
+      </div>
+    </div>
+    <div class="win-stats" id="win-stats"></div>
+    <div class="history-wrap">
+      <div class="history-title">Mission Log</div>
+      <div class="history-scroll"><div id="history-table-wrap"></div></div>
+    </div>
+    <button class="btn" onclick="backToMenu()">NEW MISSION</button>
+    <div class="brand-footer">
+      A <a href="https://diamondsky.au/" target="_blank" rel="noopener">Diamond Sky</a> project
+      &nbsp;·&nbsp;
+      <a href="https://www.linkedin.com/in/georgedyke/" target="_blank" rel="noopener">LinkedIn</a>
+    </div>
+  </div>
+
+</div>
+<!-- TUTORIAL -->
+<div id="tutorial-overlay">
+  <div id="tutorial-panel">
+    <div class="tut-title">MISSION BRIEFING</div>
+
+    <div class="tut-section">
+      <div class="tut-heading">Objective</div>
+      <p>Tiles fall one at a time — each is a slice of a real satellite image. Place every tile in the correct column and rotation to reconstruct the full picture.</p>
+    </div>
+
+    <div class="tut-section">
+      <div class="tut-heading">Edge Hints</div>
+      <p>Coloured strips on tile edges match the edges of their neighbours in the completed image. Use them to work out where — and which way up — each tile belongs. Difficulty controls how many hints are shown: Easy gives you all four sides, Moderate gives two, Hard gives none.</p>
+    </div>
+
+    <div class="tut-section">
+      <div class="tut-heading">Controls</div>
+      <div class="tut-keys">
+        <span>← →</span> &nbsp;Move column &nbsp;&nbsp;
+        <span>↑</span> &nbsp;Rotate tile<br>
+        <span>↓</span> &nbsp;Fall faster &nbsp;&nbsp;&nbsp;&nbsp;
+        <span>SPACE</span> &nbsp;Hard drop<br>
+        <span>ESC</span> &nbsp;Return to menu
+      </div>
+    </div>
+
+    <div class="tut-section">
+      <div class="tut-heading">Scoring</div>
+      <p>A correct placement scores 300 pts. Chain 3 or more in a row for a ×2 streak bonus. Wrong column or rotation deducts points and resets your streak.</p>
+    </div>
+
+    <button class="btn" onclick="closeTutorial()">GOT IT — LAUNCH MISSIONS</button>
+  </div>
+</div>
+
+<div id="flash"></div>
+<div class="msg-overlay" id="msg-overlay"></div>
+
+<script>
+// ── Recent date for NASA GIBS (imagery has ~3 day processing lag) ──
+function getImageDate(){
+  const d = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+  return d.toISOString().slice(0,10);
+}
+
+// ── Seeded RNG ──
+function makeRng(seed) {
+  let s = seed;
+  return () => { s = (s * 16807) % 2147483647; return (s-1)/2147483646; };
+}
+
+// ── Procedural images ──
+// ── Realistic satellite imagery generators ──
+// Smooth noise helpers
+function smoothNoise(r){
+  const P=[];for(let i=0;i<256;i++)P[i]=i;
+  for(let i=255;i>0;i--){const j=Math.floor(r()*(i+1));[P[i],P[j]]=[P[j],P[i]];}
+  const fade=t=>t*t*t*(t*(t*6-15)+10);
+  const lerp=(a,b,t)=>a+(b-a)*t;
+  const grad=(h,x,y)=>{const v=h&3;const u=v<2?x:y,w=v<2?y:x;return((h&1)?-u:u)+((h&2)?-w:w);};
+  return function noise(x,y){
+    const X=Math.floor(x)&255,Y=Math.floor(y)&255;
+    x-=Math.floor(x);y-=Math.floor(y);
+    const u=fade(x),v=fade(y);
+    const a=P[X]+Y,b=P[X+1]+Y;
+    return lerp(lerp(grad(P[a],x,y),grad(P[b],x-1,y),u),lerp(grad(P[a+1],x,y-1),grad(P[b+1],x-1,y-1),u),v);
+  };
+}
+function fbm(noise,x,y,oct){
+  let v=0,a=0.5,f=1;
+  for(let i=0;i<oct;i++){v+=noise(x*f,y*f)*a;a*=0.5;f*=2.1;}
+  return v;
+}
+
+// Scene 1: Tropical rainforest (Amazon-style)
+function genNASA(size){
+  const c=document.createElement('canvas');c.width=c.height=size;
+  const ctx=c.getContext('2d'),r=makeRng(42);
+  const noise=smoothNoise(r);
+  const img=ctx.createImageData(size,size);
+  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+    const nx=x/size*4,ny=y/size*4;
+    const n=fbm(noise,nx,ny,6)*0.5+0.5;
+    const n2=fbm(noise,nx+5,ny+5,4)*0.5+0.5;
+    // Deep jungle greens with variation
+    const ri=(20+n*40+n2*15)|0;
+    const gi=(60+n*80+n2*30)|0;
+    const bi=(15+n*30)|0;
+    // Rivers — low-lying sinuous blue channels
+    const river=Math.abs(fbm(noise,nx*0.5,ny*0.5+10,3));
+    const riverMask=Math.max(0,1-river*8)*Math.max(0,1-(n-0.45)*20);
+    const rr=ri+(20-ri)*riverMask|0;
+    const rg=gi+(80-gi)*riverMask|0;
+    const rb=bi+(120-bi)*riverMask|0;
+    // Cloud wisps
+    const cloud=Math.max(0,fbm(noise,nx*0.7+20,ny*0.7+20,4)-0.15)*2;
+    const i4=(y*size+x)*4;
+    img.data[i4]  =Math.min(255,rr+(255-rr)*cloud*0.7)|0;
+    img.data[i4+1]=Math.min(255,rg+(255-rg)*cloud*0.7)|0;
+    img.data[i4+2]=Math.min(255,rb+(255-rb)*cloud*0.8)|0;
+    img.data[i4+3]=255;
+  }
+  ctx.putImageData(img,0,0);
+  return c;
+}
+
+// Scene 2: Arid desert / canyon terrain (Sahara/Southwest-style)
+function genCity(size){
+  const c=document.createElement('canvas');c.width=c.height=size;
+  const ctx=c.getContext('2d'),r=makeRng(7);
+  const noise=smoothNoise(r);
+  const img=ctx.createImageData(size,size);
+  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+    const nx=x/size*5,ny=y/size*5;
+    const n=fbm(noise,nx,ny,7)*0.5+0.5;
+    const n2=fbm(noise,nx+8,ny+3,4)*0.5+0.5;
+    // Sandy/ochre tones of desert
+    const ri=(160+n*80+n2*10)|0;
+    const gi=(120+n*60+n2*10)|0;
+    const bi=(60+n*40)|0;
+    // Shadow in valleys (darker ridges)
+    const ridge=Math.abs(fbm(noise,nx*2,ny*2+15,3));
+    const shadow=Math.max(0,1-ridge*5)*0.4;
+    // Sparse dark vegetation patches
+    const veg=Math.max(0,fbm(noise,nx*3,ny*3+30,3)-0.25)*3;
+    const vegMask=veg>0.5?veg-0.5:0;
+    const i4=(y*size+x)*4;
+    img.data[i4]  =Math.min(255,ri*(1-shadow)*(1-vegMask*0.6))|0;
+    img.data[i4+1]=Math.min(255,gi*(1-shadow)*(1-vegMask*0.3))|0;
+    img.data[i4+2]=Math.min(255,bi*(1-shadow)*(1-vegMask*0.1))|0;
+    img.data[i4+3]=255;
+  }
+  ctx.putImageData(img,0,0);
+  return c;
+}
+
+// Scene 3: Ocean with reef / coastal shallows (Great Barrier Reef-style)
+function genOcean(size){
+  const c=document.createElement('canvas');c.width=c.height=size;
+  const ctx=c.getContext('2d'),r=makeRng(13);
+  const noise=smoothNoise(r);
+  const img=ctx.createImageData(size,size);
+  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+    const nx=x/size*4,ny=y/size*4;
+    const depth=fbm(noise,nx,ny,6)*0.5+0.5;
+    const n2=fbm(noise,nx+9,ny+2,4)*0.5+0.5;
+    // Deep ocean to shallow turquoise gradient
+    const shallow=Math.max(0,depth-0.45)*3;
+    const ri=(0+shallow*80+n2*10)|0;
+    const gi=(40+depth*60+shallow*120)|0;
+    const bi=(80+depth*100+shallow*50)|0;
+    // Coral/sand patches in very shallow areas
+    const coral=Math.max(0,depth-0.62)*8;
+    const corR=(140+n2*60)*coral;
+    const corG=(100+n2*40)*coral;
+    const corB=(60+n2*20)*coral;
+    // Coastline / land intrusion on one edge
+    const land=Math.max(0,fbm(noise,nx*0.8+20,ny*0.8,4)-0.1);
+    const landMask=Math.min(1,land*4)*(x<size*0.35?1:0);
+    // Cloud
+    const cloud=Math.max(0,fbm(noise,nx*0.6+40,ny*0.6,3)-0.2)*1.5;
+    let pr=ri+corR,pg=gi+corG,pb=bi+corB;
+    pr=pr*(1-landMask)+(60+n2*60)*landMask;
+    pg=pg*(1-landMask)+(80+n2*80)*landMask;
+    pb=pb*(1-landMask)+(30+n2*40)*landMask;
+    const i4=(y*size+x)*4;
+    img.data[i4]  =Math.min(255,pr+(255-pr)*cloud*0.8)|0;
+    img.data[i4+1]=Math.min(255,pg+(255-pg)*cloud*0.8)|0;
+    img.data[i4+2]=Math.min(255,pb+(255-pb)*cloud*0.9)|0;
+    img.data[i4+3]=255;
+  }
+  ctx.putImageData(img,0,0);
+  return c;
+}
+
+// ── State ──
+let selImagery='nasa', selGrid=4, selSource='nasa', selDifficulty='easy';
+const HINT_EDGES = { easy:4, moderate:2, hard:0 };
+let gridN, sourceImage, tileSize;
+let tiles=[], locked=[], pool=[];
+let cur=null; // {tileIdx, col, canvasRow, rotation}
+let score=0, streak=0, misses=0, lockedCount=0, totalTiles=0;
+let gameRunning=false, fallTimer=0, fallInterval=1800, lastTime=0, startTime=0;
+const FALL_ROWS=8;
+// TS (tile size) is computed at game start based on viewport so everything fits
+
+// ── Menu ──
+function selectImagery(el){
+  document.querySelectorAll('.imagery-option').forEach(e=>e.classList.remove('selected'));
+  el.classList.add('selected'); selImagery=el.dataset.type;
+}
+function setGrid(n){
+  selGrid=n;
+  [3,4,5].forEach(x=>document.getElementById('grid-'+x).classList.toggle('active',x===n));
+}
+function setSource(s){
+  selSource=s;
+  ['nasa','esa','osm'].forEach(x=>document.getElementById('src-'+x).classList.toggle('active',x===s));
+}
+function setDifficulty(d){
+  selDifficulty=d;
+  ['easy','moderate','hard'].forEach(x=>document.getElementById('diff-'+x).classList.toggle('active',x===d));
+}
+window.addEventListener('DOMContentLoaded',()=>{
+  [['prev-nasa',genNASA],['prev-city',genCity],['prev-ocean',genOcean]].forEach(([id,fn])=>{
+    document.getElementById(id).getContext('2d').drawImage(fn(120),0,0,120,120);
+  });
+  // Try to load real previews: NASA first, OSM fallback
+  const previewPairs = [
+    ['prev-nasa',  NASA_SCENES[0], OSM_SCENES[0]],
+    ['prev-city',  NASA_SCENES[1], OSM_SCENES[1]],
+    ['prev-ocean', NASA_SCENES[3], OSM_SCENES[3]],
+  ];
+  previewPairs.forEach(([id, nasaScene, osmScene])=>{
+    const [minLon,minLat,maxLon,maxLat] = nasaScene.bbox;
+    const nasaUrl = `https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?`+
+      `SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap`+
+      `&LAYERS=MODIS_Terra_CorrectedReflectance_TrueColor`+
+      `&SRS=EPSG:4326&STYLES=&FORMAT=image/jpeg`+
+      `&TIME=${getImageDate()}&WIDTH=120&HEIGHT=120`+
+      `&BBOX=${minLon},${minLat},${maxLon},${maxLat}`;
+    fetch(nasaUrl)
+      .then(r=>r.blob()).then(b=>createImageBitmap(b))
+      .then(bmp=>{ const c=document.getElementById(id); c.getContext('2d').drawImage(bmp,0,0,120,120); bmp.close(); })
+      .catch(()=>{
+        // OSM fallback for preview
+        const img=new Image(); img.crossOrigin='anonymous';
+        img.onload=()=>document.getElementById(id).getContext('2d').drawImage(img,0,0,120,120);
+        img.src=tileUrl(osmScene.z,osmScene.x,osmScene.y);
+      });
+  });
+  setGrid(4);
+  renderBestScore();
+  if(!localStorage.getItem('orbital-tutorial-seen')) showTutorial();
+});
+
+// ── Real map imagery via OpenStreetMap tiles ──
+// OSM is explicitly in claude.ai's img-src CSP and serves CORS headers (canvas-safe)
+// We pick visually interesting high-zoom locations
+
+// ── NASA GIBS scenes (WMS, true-colour MODIS satellite imagery) ──
+const NASA_SCENES = [
+  { name:'Amazon Rainforest',   bbox:[-65,-10,-45,10],        type:'Tropical'  },
+  { name:'Sahara Desert',       bbox:[0,18,30,35],            type:'Arid'      },
+  { name:'Himalayas',           bbox:[78,26,98,36],           type:'Alpine'    },
+  { name:'Great Barrier Reef',  bbox:[142,-24,154,-14],       type:'Coastal'   },
+  { name:'Greenland',           bbox:[-55,60,-20,80],         type:'Polar'     },
+  { name:'Grand Canyon',        bbox:[-114.5,35.5,-111,37.5], type:'Arid'      },
+  { name:'Nile Delta',          bbox:[29,29,33,32],           type:'Coastal'   },
+  { name:'Maldives',            bbox:[72,1,74,4],             type:'Tropical'  },
+  { name:'Iceland',             bbox:[-25,63,-12,67],         type:'Volcanic'  },
+  { name:'Patagonia',           bbox:[-75,-55,-65,-45],       type:'Alpine'    },
+];
+
+// ── OSM scenes (fallback) ──
+const OSM_SCENES = [
+  { name:'Grand Canyon',        z:11, x:435,  y:792  },
+  { name:'Amazon River',        z:10, x:290,  y:521  },
+  { name:'Sahara Dunes',        z:10, x:533,  y:488  },
+  { name:'Maldives Atolls',     z:10, x:816,  y:576  },
+  { name:'Greenland Coast',     z:8,  x:120,  y:140  },
+  { name:'Nile Delta',          z:10, x:607,  y:389  },
+  { name:'Himalayan Glaciers',  z:10, x:745,  y:368  },
+  { name:'Great Barrier Reef',  z:9,  x:463,  y:294  },
+  { name:'Iceland Lava Fields', z:9,  x:233,  y:166  },
+  { name:'Patagonia',           z:9,  x:284,  y:382  },
+];
+
+async function fetchNASAImage(imgSize, scene){
+  const url = buildNASAUrl(imgSize, scene);
+  console.log('[ORBITAL] Trying NASA GIBS:', scene.name);
+  const timeout = new Promise((_,rej) => setTimeout(()=>rej(new Error('timeout')), 8000));
+  const load = fetch(url).then(r=>{ if(!r.ok) throw new Error(`HTTP ${r.status}`); return r.blob(); })
+    .then(blob=>createImageBitmap(blob))
+    .then(bmp=>{ const c=document.createElement('canvas'); c.width=c.height=imgSize; c.getContext('2d').drawImage(bmp,0,0,imgSize,imgSize); bmp.close(); return c; });
+  return Promise.race([load, timeout]);
+}
+
+function tileUrl(z, x, y){
+  const sub = ['a','b','c'][Math.abs(x+y)%3];
+  return `https://${sub}.tile.openstreetmap.org/${z}/${x}/${y}.png`;
+}
+
+function loadTileImg(url){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload  = ()=>resolve(img);
+    img.onerror = ()=>reject(new Error('tile failed: '+url));
+    img.src = url;
+  });
+}
+
+async function fetchOSMImage(imgSize, scene){
+  const {z, x, y} = scene;
+  const T=256, cols=3, rows=3;
+  const stitched=document.createElement('canvas'); stitched.width=cols*T; stitched.height=rows*T;
+  const sctx=stitched.getContext('2d');
+  await Promise.all(
+    Array.from({length:rows*cols},(_,i)=>{
+      const tr=Math.floor(i/cols), tc=i%cols;
+      return loadTileImg(tileUrl(z,x+tc,y+tr)).then(img=>sctx.drawImage(img,tc*T,tr*T));
+    })
+  );
+  const cropX=Math.floor((cols*T-imgSize)/2), cropY=Math.floor((rows*T-imgSize)/2);
+  const out=document.createElement('canvas'); out.width=out.height=imgSize;
+  out.getContext('2d').drawImage(stitched,cropX,cropY,imgSize,imgSize,0,0,imgSize,imgSize);
+  return out;
+}
+
+// ── Start ──
+let TS = 64;
+let currentSceneName = '';
+let currentScene = null;
+let currentImageUrl = '';    // viewer URL (NASA Worldview / Copernicus / OSM map)
+let currentRawImageUrl = ''; // direct image URL (WMS JPEG etc.)
+let currentImageDate = '';
+let selSpeed = 'normal';
+let baseFallInterval = 1800;
+const SPEED_MAP = { slow: 2800, normal: 1800, fast: 900 };
+
+function setSpeed(s){
+  selSpeed = s;
+  ['slow','normal','fast'].forEach(x=>document.getElementById('speed-'+x).classList.toggle('active',x===s));
+}
+
+function formatLatLon(bbox){
+  const [minLon,minLat,maxLon,maxLat] = bbox;
+  const lat = ((minLat+maxLat)/2).toFixed(1);
+  const lon = ((minLon+maxLon)/2).toFixed(1);
+  const latStr = lat>=0 ? lat+'°N' : Math.abs(lat)+'°S';
+  const lonStr = lon>=0 ? lon+'°E' : Math.abs(lon)+'°W';
+  return `${latStr},  ${lonStr}`;
+}
+
+function bboxCenter(bbox){
+  const [minLon,minLat,maxLon,maxLat] = bbox;
+  return { lat:((minLat+maxLat)/2).toFixed(5), lon:((minLon+maxLon)/2).toFixed(5) };
+}
+
+function buildMapsUrl(bbox){
+  const {lat,lon} = bboxCenter(bbox);
+  return `https://www.openstreetmap.org/#map=8/${lat}/${lon}`;
+}
+
+function buildNASAUrl(imgSize, scene){
+  const [minLon,minLat,maxLon,maxLat] = scene.bbox;
+  return `https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?`+
+    `SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap`+
+    `&LAYERS=MODIS_Terra_CorrectedReflectance_TrueColor`+
+    `&SRS=EPSG:4326&STYLES=&FORMAT=image/jpeg`+
+    `&TIME=${getImageDate()}&WIDTH=${imgSize}&HEIGHT=${imgSize}`+
+    `&BBOX=${minLon},${minLat},${maxLon},${maxLat}`;
+}
+
+function buildNASAViewerUrl(scene){
+  const [minLon,minLat,maxLon,maxLat] = scene.bbox;
+  return `https://worldview.earthdata.nasa.gov/?v=${minLon},${minLat},${maxLon},${maxLat}`+
+    `&t=${getImageDate()}&l=MODIS_Terra_CorrectedReflectance_TrueColor`;
+}
+
+function buildESAViewerUrl(scene){
+  const {lat,lon} = bboxCenter(scene.bbox);
+  return `https://browser.dataspace.copernicus.eu/?zoom=9&lat=${lat}&lng=${lon}`+
+    `&themeId=DEFAULT-THEME&datasetId=S2_L2A_CDAS`;
+}
+
+function populateSceneInfo(nameId, metaId, mapsId, viewId, rawId){
+  document.getElementById(nameId).textContent = currentSceneName.toUpperCase();
+  document.getElementById(metaId).textContent =
+    currentScene.type + '  •  ' + formatLatLon(currentScene.bbox) + '  •  ' + currentImageDate;
+  document.getElementById(mapsId).href = buildMapsUrl(currentScene.bbox);
+  const viewEl = document.getElementById(viewId);
+  if(currentImageUrl){ viewEl.href = currentImageUrl; viewEl.style.display = ''; }
+  else { viewEl.style.display = 'none'; }
+  const rawEl = document.getElementById(rawId);
+  if(rawEl){
+    if(currentRawImageUrl){ rawEl.href = currentRawImageUrl; rawEl.style.display = ''; }
+    else { rawEl.style.display = 'none'; }
+  }
+}
+
+function buildOSMUrl(bbox){
+  const {lat,lon} = bboxCenter(bbox);
+  return `https://www.openstreetmap.org/#map=10/${lat}/${lon}`;
+}
+
+function buildESAUrl(imgSize, scene){
+  const [minLon,minLat,maxLon,maxLat] = scene.bbox;
+  return `https://tiles.maps.eox.at/wms?SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1`+
+    `&LAYERS=s2cloudless-2021&FORMAT=image/jpeg&STYLES=`+
+    `&SRS=EPSG:4326&WIDTH=${imgSize}&HEIGHT=${imgSize}`+
+    `&BBOX=${minLon},${minLat},${maxLon},${maxLat}`;
+}
+
+async function fetchESAImage(imgSize, scene){
+  const url = buildESAUrl(imgSize, scene);
+  console.log('[ORBITAL] Trying ESA Sentinel-2:', scene.name);
+  const timeout = new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),8000));
+  const load = fetch(url).then(r=>{ if(!r.ok) throw new Error(`HTTP ${r.status}`); return r.blob(); })
+    .then(blob=>createImageBitmap(blob))
+    .then(bmp=>{ const c=document.createElement('canvas'); c.width=c.height=imgSize; c.getContext('2d').drawImage(bmp,0,0,imgSize,imgSize); bmp.close(); return c; });
+  return Promise.race([load, timeout]);
+}
+
+async function startGame(){
+  gridN=selGrid; totalTiles=gridN*gridN;
+  lockedCount=0; score=0; streak=0; misses=0; startTime=Date.now();
+  baseFallInterval = SPEED_MAP[selSpeed]; fallInterval = baseFallInterval;
+
+  const isMobile = window.innerWidth <= 700;
+  const availH = isMobile ? window.innerHeight - 280 : window.innerHeight - 80;
+  const availW = isMobile ? window.innerWidth - 24   : window.innerWidth - 160*2 - 20*2 - 32;
+  const maxByHeight = Math.floor(availH / (gridN + FALL_ROWS));
+  const maxByWidth  = Math.floor(availW / gridN);
+  TS = Math.max(32, Math.min(96, maxByHeight, maxByWidth));
+  // On mobile shrink the next-tile preview canvas to match
+  if(isMobile){
+    const nc = document.getElementById('next-canvas');
+    nc.width = 64; nc.height = 64;
+  } else {
+    const nc = document.getElementById('next-canvas');
+    nc.width = 140; nc.height = 140;
+  }
+  tileSize=TS;
+  const imgSize=gridN*TS;
+
+  document.getElementById('menu-screen').style.display='none';
+  const loadingSubs = { nasa:'Fetching NASA MODIS satellite imagery…', esa:'Fetching ESA Sentinel-2 imagery…', osm:'Fetching OpenStreetMap tiles…' };
+  document.getElementById('loading-sub').textContent = loadingSubs[selSource];
+  document.getElementById('loading-screen').style.display='flex';
+
+  const idx = Math.floor(Math.random()*NASA_SCENES.length);
+  const nasaScene = NASA_SCENES[idx];
+  const osmScene  = OSM_SCENES[idx];
+  currentScene = nasaScene;
+
+  currentImageDate = getImageDate();
+  currentImageUrl = '';
+
+  if(selSource === 'nasa'){
+    try {
+      sourceImage = await fetchNASAImage(imgSize, nasaScene);
+      currentSceneName = nasaScene.name;
+      currentImageUrl = buildNASAViewerUrl(nasaScene);
+      currentRawImageUrl = buildNASAUrl(imgSize, nasaScene);
+      console.log('[ORBITAL] NASA success:', nasaScene.name);
+    } catch(e) {
+      console.warn('[ORBITAL] NASA failed:', e.message, '— trying OSM');
+      try {
+        sourceImage = await fetchOSMImage(imgSize, osmScene);
+        currentSceneName = osmScene.name;
+        currentImageUrl = buildOSMUrl(nasaScene.bbox); currentRawImageUrl = '';
+        console.log('[ORBITAL] OSM fallback success');
+      } catch(e2) {
+        console.warn('[ORBITAL] OSM failed:', e2.message, '— using procedural');
+        sourceImage = genNASA(imgSize);
+        currentSceneName = nasaScene.name + ' (procedural)'; currentRawImageUrl = '';
+      }
+    }
+  } else if(selSource === 'esa'){
+    try {
+      sourceImage = await fetchESAImage(imgSize, nasaScene);
+      currentSceneName = nasaScene.name;
+      currentImageUrl = buildESAViewerUrl(nasaScene);
+      currentRawImageUrl = buildESAUrl(imgSize, nasaScene);
+      console.log('[ORBITAL] ESA success:', nasaScene.name);
+    } catch(e) {
+      console.warn('[ORBITAL] ESA failed:', e.message, '— trying OSM');
+      try {
+        sourceImage = await fetchOSMImage(imgSize, osmScene);
+        currentSceneName = osmScene.name;
+        currentImageUrl = buildOSMUrl(nasaScene.bbox); currentRawImageUrl = '';
+        console.log('[ORBITAL] OSM fallback success');
+      } catch(e2) {
+        console.warn('[ORBITAL] OSM failed:', e2.message, '— using procedural');
+        sourceImage = genNASA(imgSize);
+        currentSceneName = nasaScene.name + ' (procedural)'; currentRawImageUrl = '';
+      }
+    }
+  } else {
+    // OSM only
+    try {
+      sourceImage = await fetchOSMImage(imgSize, osmScene);
+      currentSceneName = osmScene.name;
+      currentImageUrl = buildOSMUrl(nasaScene.bbox);
+      console.log('[ORBITAL] OSM success:', osmScene.name);
+    } catch(e) {
+      console.warn('[ORBITAL] OSM failed:', e.message, '— using procedural');
+      sourceImage = genNASA(imgSize);
+      currentSceneName = nasaScene.name + ' (procedural)';
+    }
+  }
+
+  document.getElementById('loading-screen').style.display='none';
+  document.getElementById('game-screen').style.display='block';
+
+  populateSceneInfo('scene-name-disp','scene-meta-disp','maps-link','img-link','raw-link');
+
+  // Slice tiles + compute edge colours
+  tiles=[]; locked=Array.from({length:gridN},()=>Array(gridN).fill(false));
+  const sc=sourceImage.getContext('2d');
+
+  // Pre-assign bright colours to every internal grid edge.
+  // Horizontal edges: hEdge[r][c] = colour shared between tile(r-1,c) bottom and tile(r,c) top
+  // Vertical edges:   vEdge[r][c] = colour shared between tile(r,c-1) right and tile(r,c) left
+  // Outer boundary edges get a neutral dark colour (no matching neighbour).
+  const palette=[
+    '#ff3366','#ff9500','#ffe000','#00e676','#00e5ff',
+    '#2979ff','#d500f9','#ff6d00','#76ff03','#f50057',
+    '#00bcd4','#cddc39','#ff4081','#18ffff','#b2ff59',
+  ];
+  let pIdx=0;
+  const hEdge=Array.from({length:gridN+1},()=>Array(gridN).fill(null));
+  const vEdge=Array.from({length:gridN},()=>Array(gridN+1).fill(null));
+  for(let r=1;r<gridN;r++) for(let c=0;c<gridN;c++) hEdge[r][c]=palette[pIdx++%palette.length];
+  for(let r=0;r<gridN;r++) for(let c=1;c<gridN;c++) vEdge[r][c]=palette[pIdx++%palette.length];
+  const outerCol='#1a2a3a'; // dark, barely visible for outer edges
+
+  for(let row=0;row<gridN;row++) for(let col=0;col<gridN;col++){
+    const id=sc.getImageData(col*TS,row*TS,TS,TS);
+    const cc=document.createElement('canvas'); cc.width=cc.height=TS; cc.getContext('2d').putImageData(id,0,0);
+    // edges[0]=top, [1]=right, [2]=bottom, [3]=left  — in CORRECT orientation
+    const edges=[
+      hEdge[row][col]   || outerCol,  // top edge
+      vEdge[row][col+1] || outerCol,  // right edge
+      hEdge[row+1][col] || outerCol,  // bottom edge
+      vEdge[row][col]   || outerCol,  // left edge
+    ];
+    tiles.push({col,row,cachedCanvas:cc,edges});
+  }
+
+  const canvas=document.getElementById('game-canvas');
+  canvas.width=gridN*TS; canvas.height=(gridN+FALL_ROWS)*TS;
+
+  pool=[]; rebuildPool();
+
+  // Draw reference image
+  const rc=document.getElementById('ref-canvas');
+  rc.getContext('2d').drawImage(sourceImage,0,0,180,180);
+
+  spawnTile();
+  gameRunning=true; lastTime=performance.now();
+  requestAnimationFrame(loop);
+}
+
+// ── Pool: bottom row always eligible; row R tile eligible when the cell directly below (R+1, same col) is locked ──
+function rebuildPool(){
+  pool=pool.filter(ti=>!locked[tiles[ti].row][tiles[ti].col]);
+  for(let ti=0;ti<tiles.length;ti++){
+    const t=tiles[ti];
+    if(locked[t.row][t.col]) continue;
+    if(pool.includes(ti)) continue;
+    const isBottom=(t.row===gridN-1);
+    const cellBelowLocked=t.row<gridN-1 && locked[t.row+1][t.col]===true;
+    if(isBottom||cellBelowLocked) pool.push(ti);
+  }
+}
+
+function pickFromPool(excludeTi){
+  const choices=pool.filter(ti=>ti!==excludeTi);
+  const src=choices.length?choices:pool;
+  if(!src.length) return null;
+  return src[Math.floor(Math.random()*src.length)];
+}
+
+// ── Spawn ──
+function spawnTile(){
+  rebuildPool();
+  if(!pool.length){winGame();return;}
+  const ti=pickFromPool(cur?.tileIdx);
+  if(ti===null) return;
+  // canvasRow: 0 = very top of canvas. Board starts at FALL_ROWS.
+  // Start tile just above the board (canvasRow = FALL_ROWS - 1)
+  cur={tileIdx:ti, col:Math.floor(gridN/2), canvasRow:0, rotation:Math.floor(Math.random()*4)};
+  refreshNextPreview();
+  refreshPoolDisplay();
+}
+
+function refreshNextPreview(){
+  const c=document.getElementById('next-canvas');
+  const SZ=c.width; // respects any runtime resize
+  const ctx=c.getContext('2d'); ctx.clearRect(0,0,SZ,SZ);
+  if(!cur) return;
+  const t=tiles[cur.tileIdx];
+
+  // Draw tile rotated, scaled to fill the canvas
+  ctx.save(); ctx.translate(SZ/2,SZ/2); ctx.rotate(cur.rotation*Math.PI/2);
+  ctx.drawImage(t.cachedCanvas,-SZ/2,-SZ/2,SZ,SZ); ctx.restore();
+
+  // Edge strips (respect difficulty hint limit)
+  const limit=HINT_EDGES[selDifficulty];
+  if(limit>0){
+    const scale=SZ/TS;
+    const W=Math.round(5*scale);
+    const rotated=[0,1,2,3].map(i=>t.edges[(i+4-cur.rotation)%4]);
+    const rects=[[0,0,SZ,W],[SZ-W,0,W,SZ],[0,SZ-W,SZ,W],[0,0,W,SZ]];
+    ctx.globalAlpha=0.9;
+    for(let i=0;i<Math.min(limit,4);i++){ctx.fillStyle=rotated[i];ctx.fillRect(...rects[i]);}
+    ctx.globalAlpha=1;
+  }
+
+  // Highlight on reference image
+  const refEl=document.getElementById('ref-canvas');
+  const refSize=refEl.getBoundingClientRect().width||128;
+  const cellPx=refSize/gridN;
+  const hl=document.getElementById('ref-highlight');
+  hl.style.display='block';
+  hl.style.left=`${t.col*cellPx}px`;
+  hl.style.top=`${t.row*cellPx}px`;
+  hl.style.width=`${cellPx}px`;
+  hl.style.height=`${cellPx}px`;
+}
+
+function refreshPoolDisplay(){
+  document.getElementById('pool-count').textContent=pool.length;
+  document.getElementById('pool-display').innerHTML=
+    pool.map(ti=>`<div class="pool-dot${ti===cur?.tileIdx?' cur':''}"></div>`).join('');
+}
+
+// ── Loop ──
+function loop(now){
+  if(!gameRunning) return;
+  fallTimer+=now-lastTime; lastTime=now;
+  if(fallTimer>=fallInterval){fallTimer=0; if(cur) stepFall();}
+  draw(); updateHUD();
+  requestAnimationFrame(loop);
+}
+
+function stepFall(){
+  cur.canvasRow++;
+  const boardRow = cur.canvasRow - FALL_ROWS; // negative = still in fall zone above board
+  const t = tiles[cur.tileIdx];
+  const bottomBoardRow = landingRow(cur.col);        // lowest free board row in this column
+  const bottomCanvasRow = FALL_ROWS + bottomBoardRow;
+
+  // Auto-snap: tile is exactly at its correct board position with correct rotation
+  if(boardRow === t.row && cur.col === t.col && cur.rotation % 4 === 0){
+    evaluate();
+    return;
+  }
+
+  // Tile has reached the physical bottom of this column
+  if(cur.canvasRow >= bottomCanvasRow){
+    cur.canvasRow = bottomCanvasRow;
+    evaluate();
+  }
+}
+
+function miss(){
+  misses++; streak=0; score=Math.max(0,score-50);
+  flash('wrong'); showMsg('MISSED','var(--wrong)');
+  const hl=document.getElementById('ref-highlight'); if(hl) hl.style.display='none';
+  cur=null; fallTimer=0; setTimeout(spawnTile,400);
+}
+
+// Space / hard drop — snap to physical bottom instantly
+function doLand(){
+  if(!cur) return;
+  cur.canvasRow = FALL_ROWS + landingRow(cur.col);
+  evaluate();
+}
+
+function evaluate(){
+  const {tileIdx, col, canvasRow, rotation} = cur;
+  const boardRow = canvasRow - FALL_ROWS;
+  const t = tiles[tileIdx];
+  const posOK = (col === t.col) && (boardRow === t.row);
+  const rotOK = (rotation % 4 === 0);
+
+  if(posOK && rotOK){
+    locked[t.row][t.col]=true; lockedCount++;
+    document.getElementById('progress-bar').style.width=(lockedCount/totalTiles*100)+'%';
+    streak++; const bonus=streak>=3?2:1; score+=300*bonus;
+    flash('correct'); showMsg(streak>=3?`×${bonus} STREAK!`:'LOCKED IN','var(--correct)');
+    cur=null; fallTimer=0; rebuildPool(); refreshPoolDisplay();
+    if(lockedCount>=totalTiles){setTimeout(winGame,350);return;}
+    setTimeout(spawnTile,350);
+  } else if(posOK && !rotOK){
+    misses++; streak=0; score=Math.max(0,score-20);
+    flash('wrong'); showMsg('WRONG ROTATION','var(--accent2)');
+    cur=null; fallTimer=0; setTimeout(spawnTile,450);
+  } else {
+    misses++; streak=0; score=Math.max(0,score-30);
+    flash('wrong'); showMsg('WRONG SPOT','var(--wrong)');
+    cur=null; fallTimer=0; setTimeout(spawnTile,450);
+  }
+}
+
+// Find the lowest free row in col that the tile can land on.
+// Scans from the bottom up looking for the first unlocked row.
+function landingRow(col){
+  for(let r=gridN-1; r>=0; r--){
+    if(!locked[r][col]) return r;
+  }
+  return 0; // column full (shouldn't happen in normal play)
+}
+
+// ── Draw ──
+function draw(){
+  const canvas=document.getElementById('game-canvas');
+  const ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Board cells
+  for(let r=0;r<gridN;r++) for(let c=0;c<gridN;c++){
+    const x=c*TS, y=(FALL_ROWS+r)*TS;
+    // Ghost image
+    ctx.save(); ctx.globalAlpha=0.32;
+    const gt=tiles.find(t=>t.col===c&&t.row===r);
+    if(gt) ctx.drawImage(gt.cachedCanvas,x,y,TS,TS);
+    ctx.restore();
+    // Eligible column hint (column of current tile)
+    if(cur&&tiles[cur.tileIdx].col===c&&!locked[r][c]){
+      ctx.fillStyle='rgba(0,212,255,0.06)'; ctx.fillRect(x,y,TS,TS);
+    }
+    // Cell border
+    ctx.strokeStyle=locked[r][c]?'rgba(0,255,136,0.2)':'rgba(0,80,140,0.3)';
+    ctx.lineWidth=1; ctx.strokeRect(x+.5,y+.5,TS-1,TS-1);
+  }
+
+  // Locked tiles — draw tile + edge colour strips (only exposed edges, fading as tile gets more constrained)
+  for(let r=0;r<gridN;r++) for(let c=0;c<gridN;c++){
+    if(!locked[r][c]) continue;
+    const t=tiles.find(t=>t.col===c&&t.row===r);
+    if(!t) continue;
+    ctx.drawImage(t.cachedCanvas,c*TS,(FALL_ROWS+r)*TS,TS,TS);
+
+    // Determine which edges are exposed (neighbour not yet locked, or boundary)
+    // edges order: [top, right, bottom, left]
+    const exposed=[
+      r===0        ? false : !locked[r-1][c],   // top: exposed if neighbour above unlocked
+      c===gridN-1  ? false : !locked[r][c+1],   // right
+      r===gridN-1  ? false : !locked[r+1][c],   // bottom
+      c===0        ? false : !locked[r][c-1],   // left
+    ];
+    // Outer boundary edges are never shown (no neighbour to match against)
+    // Count how many internal edges are still exposed
+    const exposedCount=exposed.filter(Boolean).length;
+    if(exposedCount===0) continue; // fully surrounded — no strips needed
+
+    // Fade opacity as tile becomes more constrained:
+    // 4 exposed → 1.0,  3 → 0.82,  2 → 0.6,  1 → 0.38
+    const opacityMap=[0,0.38,0.6,0.82,1.0];
+    const alpha=opacityMap[exposedCount];
+
+    if(selDifficulty!=='hard') drawEdgeStripsSelective(ctx, c*TS, (FALL_ROWS+r)*TS, t.edges, 0, exposed, alpha);
+  }
+
+  // Falling tile
+  if(cur){
+    const t=tiles[cur.tileIdx];
+    const tx=cur.col*TS, ty=cur.canvasRow*TS;
+    const ghostY=(FALL_ROWS+landingRow(cur.col))*TS;
+    const colOK=(cur.col===t.col);
+
+    // Ghost at landing position
+    ctx.save(); ctx.globalAlpha=colOK?0.38:0.15;
+    drawRot(ctx,t.cachedCanvas,cur.col*TS,ghostY,cur.rotation);
+    ctx.restore();
+
+    // Guide line
+    if(ty+TS<ghostY){
+      ctx.save(); ctx.strokeStyle=colOK?'rgba(0,255,136,0.18)':'rgba(0,212,255,0.1)';
+      ctx.setLineDash([3,5]); ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(tx+TS/2,ty+TS); ctx.lineTo(cur.col*TS+TS/2,ghostY);
+      ctx.stroke(); ctx.setLineDash([]); ctx.restore();
+    }
+
+    // Column glow when in correct column
+    if(colOK){
+      ctx.fillStyle='rgba(0,255,136,0.04)';
+      ctx.fillRect(tx,FALL_ROWS*TS,TS,gridN*TS);
+    }
+
+    // Tile
+    drawRot(ctx,t.cachedCanvas,tx,ty,cur.rotation);
+
+    // Border
+    ctx.strokeStyle=colOK?'rgba(0,255,136,0.9)':'rgba(0,212,255,0.8)';
+    ctx.lineWidth=2; ctx.strokeRect(tx+1,ty+1,TS-2,TS-2);
+
+    // Edge colour strips
+    drawEdgeStrips(ctx, tx, ty, t.edges, cur.rotation, 0.9, HINT_EDGES[selDifficulty]);
+  }
+
+  // Divider
+  ctx.strokeStyle='rgba(0,212,255,0.2)'; ctx.lineWidth=1;
+  ctx.setLineDash([4,4]);
+  ctx.beginPath(); ctx.moveTo(0,FALL_ROWS*TS); ctx.lineTo(canvas.width,FALL_ROWS*TS); ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawRot(ctx,el,x,y,rot){
+  ctx.save(); ctx.translate(x+TS/2,y+TS/2); ctx.rotate(rot*Math.PI/2);
+  ctx.drawImage(el,-TS/2,-TS/2,TS,TS); ctx.restore();
+}
+
+// Draw edge strips on a tile. limit controls how many sides are shown (0–4).
+// Order: top, right, bottom, left. rot shifts which physical edge gets which colour.
+function drawEdgeStrips(ctx, x, y, edges, rot, alpha, limit=4){
+  if(limit<=0) return;
+  const W=5;
+  const rotated=[0,1,2,3].map(i=>edges[(i+4-rot)%4]);
+  const rects=[[x,y,TS,W],[x+TS-W,y,W,TS],[x,y+TS-W,TS,W],[x,y,W,TS]];
+  ctx.save(); ctx.globalAlpha=alpha;
+  for(let i=0;i<Math.min(limit,4);i++){ctx.fillStyle=rotated[i];ctx.fillRect(...rects[i]);}
+  ctx.restore();
+}
+
+// Draw only the exposed edges on a locked tile, with given alpha.
+// exposed = [top, right, bottom, left] booleans.
+function drawEdgeStripsSelective(ctx, x, y, edges, rot, exposed, alpha){
+  const W=5;
+  const rotated=[0,1,2,3].map(i=>edges[(i+4-rot)%4]);
+  const rects=[
+    [x,      y,        TS, W ],  // top
+    [x+TS-W, y,        W,  TS],  // right
+    [x,      y+TS-W,   TS, W ],  // bottom
+    [x,      y,        W,  TS],  // left
+  ];
+  ctx.save(); ctx.globalAlpha=alpha;
+  for(let i=0;i<4;i++){
+    if(!exposed[i]) continue;
+    ctx.fillStyle=rotated[i];
+    ctx.fillRect(...rects[i]);
+  }
+  ctx.restore();
+}
+
+// ── Input ──
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){
+    if(document.getElementById('tutorial-overlay').style.display==='flex'){ closeTutorial(); e.preventDefault(); return; }
+    backToMenu(); e.preventDefault(); return;
+  }
+  if(!gameRunning||!cur) return;
+  if(e.key==='ArrowLeft'){if(cur.col>0){cur.col--;refreshNextPreview();}}
+  else if(e.key==='ArrowRight'){if(cur.col<gridN-1){cur.col++;refreshNextPreview();}}
+  else if(e.key==='ArrowUp'){cur.rotation=(cur.rotation+1)%4;refreshNextPreview();e.preventDefault();}
+  else if(e.key==='ArrowDown'){fallInterval=120;e.preventDefault();}
+  else if(e.key===' '){doLand();e.preventDefault();}
+});
+document.addEventListener('keyup',e=>{if(e.key==='ArrowDown')fallInterval=baseFallInterval;});
+
+// ── Touch controls ──
+(function(){
+  function onBtn(id, action){
+    const el=document.getElementById(id); if(!el) return;
+    el.addEventListener('touchstart', e=>{ e.preventDefault(); action(); }, {passive:false});
+    el.addEventListener('mousedown',  e=>{ e.preventDefault(); action(); });
+  }
+  onBtn('touch-left',   ()=>{ if(gameRunning&&cur&&cur.col>0)      { cur.col--; refreshNextPreview(); }});
+  onBtn('touch-right',  ()=>{ if(gameRunning&&cur&&cur.col<gridN-1){ cur.col++; refreshNextPreview(); }});
+  onBtn('touch-rotate', ()=>{ if(gameRunning&&cur){ cur.rotation=(cur.rotation+1)%4; refreshNextPreview(); }});
+  onBtn('touch-drop',   ()=>{ if(gameRunning&&cur) doLand(); });
+
+  // Canvas swipe/tap
+  const canvas=document.getElementById('game-canvas');
+  let t0x,t0y,t0time;
+  const SWIPE=30, DROP=80, TAP=12;
+  canvas.addEventListener('touchstart', e=>{
+    if(e.touches.length!==1) return;
+    t0x=e.touches[0].clientX; t0y=e.touches[0].clientY; t0time=Date.now();
+    e.preventDefault();
+  }, {passive:false});
+  canvas.addEventListener('touchend', e=>{
+    if(!gameRunning||!cur) return;
+    const dx=e.changedTouches[0].clientX-t0x, dy=e.changedTouches[0].clientY-t0y;
+    const adx=Math.abs(dx), ady=Math.abs(dy);
+    if(Math.sqrt(dx*dx+dy*dy)<TAP){
+      cur.rotation=(cur.rotation+1)%4; refreshNextPreview();
+    } else if(ady>DROP&&ady>adx*1.5&&dy>0){
+      doLand();
+    } else if(adx>SWIPE&&adx>ady){
+      if(dx<0&&cur.col>0)          { cur.col--; refreshNextPreview(); }
+      else if(dx>0&&cur.col<gridN-1){ cur.col++; refreshNextPreview(); }
+    }
+    e.preventDefault();
+  }, {passive:false});
+  canvas.addEventListener('touchmove', e=>e.preventDefault(), {passive:false});
+})();
+
+// ── HUD ──
+function updateHUD(){
+  document.getElementById('score-disp').textContent=score;
+  document.getElementById('placed-disp').textContent=`${lockedCount}/${totalTiles}`;
+  document.getElementById('streak-disp').textContent=streak;
+  document.getElementById('miss-disp').textContent=misses;
+}
+
+// ── FX ──
+function flash(type){
+  const el=document.getElementById('flash'); el.className=type; el.style.opacity='1';
+  setTimeout(()=>el.style.opacity='0',180);
+}
+function showMsg(text,color){
+  const el=document.getElementById('msg-overlay'); el.textContent=text; el.style.color=color;
+  el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),700);
+}
+
+// ── Win ──
+function winGame(){
+  gameRunning=false;
+  document.getElementById('game-screen').style.display='none';
+  document.getElementById('win-screen').style.display='flex';
+  populateSceneInfo('win-scene-name','win-scene-meta','win-maps-link','win-img-link','win-raw-link');
+  const elapsed = Math.floor((Date.now()-startTime)/1000);
+  saveScore({ date:new Date().toISOString().slice(0,10), sceneName:currentSceneName, gridN, difficulty:selDifficulty, source:selSource, score, time:elapsed, misses, imageUrl:currentImageUrl, mapsUrl:buildMapsUrl(currentScene.bbox) });
+  renderHistory();
+  renderBestScore();
+  document.getElementById('win-stats').innerHTML=
+    `Score: <strong>${score}</strong><br>Time: <strong>${Math.floor(elapsed/60)}m ${elapsed%60}s</strong><br>Misses: <strong>${misses}</strong><br>Tiles: <strong>${totalTiles}</strong>`;
+  const wc=document.getElementById('win-canvas');
+  const ws=Math.min(280,window.innerWidth-80); wc.width=wc.height=ws;
+  wc.getContext('2d').drawImage(sourceImage,0,0,ws,ws);
+}
+
+// ── Scores ──
+const SCORES_KEY = 'orbital-scores';
+
+function loadScores(){
+  try { return JSON.parse(localStorage.getItem(SCORES_KEY)) || []; }
+  catch(e){ return []; }
+}
+
+function saveScore(entry){
+  const scores = loadScores();
+  scores.unshift(entry);
+  if(scores.length > 20) scores.length = 20;
+  localStorage.setItem(SCORES_KEY, JSON.stringify(scores));
+}
+
+function renderBestScore(){
+  const el = document.getElementById('best-score-disp');
+  if(!el) return;
+  const scores = loadScores();
+  if(!scores.length){ el.innerHTML=''; return; }
+  const best = scores.reduce((b,s)=>s.score>b.score?s:b, scores[0]);
+  const bestNameHtml = best.imageUrl
+    ? `<a href="${best.imageUrl}" target="_blank" rel="noopener">${best.sceneName} ↗</a>`
+    : best.sceneName;
+  el.innerHTML = `<div class="best-score-wrap">
+    <div class="best-score-label">Best Score</div>
+    <div class="best-score-value">${best.score}</div>
+    <div class="best-score-sub">${bestNameHtml} &nbsp;·&nbsp; ${best.gridN}×${best.gridN} &nbsp;·&nbsp; ${best.difficulty}</div>
+  </div>`;
+}
+
+function renderHistory(){
+  const el = document.getElementById('history-table-wrap');
+  if(!el) return;
+  const scores = loadScores();
+  if(!scores.length){ el.innerHTML='<div style="font-size:10px;color:var(--dim);text-align:center;padding:8px;">No missions logged yet.</div>'; return; }
+  const best = scores.reduce((b,s)=>s.score>b.score?s:b, scores[0]);
+  const rows = scores.map(s=>{
+    const t=`${Math.floor(s.time/60)}m ${String(s.time%60).padStart(2,'0')}s`;
+    const hi = s===best ? ' class="hi"' : '';
+    const nameCell = s.imageUrl
+      ? `<a href="${s.imageUrl}" target="_blank" rel="noopener">${s.sceneName} ↗</a>`
+      : s.sceneName;
+    return `<tr${hi}><td>${s.date}</td><td>${nameCell}</td><td>${s.gridN}×${s.gridN}</td><td>${s.difficulty}</td><td>${s.source.toUpperCase()}</td><td>${s.score}</td><td>${t}</td><td>${s.misses}</td></tr>`;
+  }).join('');
+  el.innerHTML = `<table class="history-table"><thead><tr>
+    <th>Date</th><th>Location</th><th>Grid</th><th>Diff</th><th>Source</th><th>Score</th><th>Time</th><th>Misses</th>
+  </tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function showTutorial(){
+  document.getElementById('tutorial-overlay').style.display='flex';
+}
+function closeTutorial(){
+  document.getElementById('tutorial-overlay').style.display='none';
+  localStorage.setItem('orbital-tutorial-seen','1');
+}
+
+function backToMenu(){
+  document.getElementById('win-screen').style.display='none';
+  document.getElementById('game-screen').style.display='none';
+  document.getElementById('loading-screen').style.display='none';
+  document.getElementById('menu-screen').style.display='flex';
+  gameRunning=false; cur=null; pool=[];
+  renderBestScore();
+}
+</script>
+</body>
+</html>
