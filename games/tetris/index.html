@@ -112,6 +112,10 @@
   .scene-links a { font-size:9px; letter-spacing:2px; color:var(--dim); text-decoration:none; transition:color 0.2s; }
   .scene-links a:hover { color:var(--accent); }
 
+  .brand-footer { font-size:9px; letter-spacing:2px; color:var(--dim); text-align:center; opacity:0.6; }
+  .brand-footer a { color:var(--dim); text-decoration:none; transition:color 0.2s; }
+  .brand-footer a:hover { color:var(--accent); opacity:1; }
+
   .arena-wrap { display:flex; flex-direction:column; align-items:center; gap:6px; }
   .arena-label { font-family:'Bebas Neue',sans-serif; font-size:11px; letter-spacing:5px; color:var(--dim); }
 
@@ -223,6 +227,11 @@
       <div class="menu-section-desc">How quickly tiles descend. Hold ↓ to drop faster mid-game.</div>
     </div>
     <button class="btn" onclick="startGame()">LAUNCH MISSION</button>
+    <div class="brand-footer">
+      A <a href="https://diamondsky.au/" target="_blank" rel="noopener">Diamond Sky</a> project
+      &nbsp;·&nbsp;
+      <a href="https://www.linkedin.com/in/georgedyke/" target="_blank" rel="noopener">LinkedIn</a>
+    </div>
   </div>
 
   <!-- LOADING -->
@@ -261,7 +270,7 @@
           <div class="scene-meta" id="scene-meta-disp">—</div>
           <div class="scene-links">
             <a id="maps-link" href="#" target="_blank" rel="noopener">Maps ↗</a>
-            <a id="img-link" href="#" target="_blank" rel="noopener" style="display:none">Image ↗</a>
+            <a id="img-link" href="#" target="_blank" rel="noopener" style="display:none">View ↗</a>
           </div>
         </div>
         <canvas id="game-canvas"></canvas>
@@ -310,11 +319,16 @@
       <div class="scene-meta" id="win-scene-meta">—</div>
       <div class="scene-links">
         <a id="win-maps-link" href="#" target="_blank" rel="noopener">Maps ↗</a>
-        <a id="win-img-link" href="#" target="_blank" rel="noopener" style="display:none">Image ↗</a>
+        <a id="win-img-link" href="#" target="_blank" rel="noopener" style="display:none">View ↗</a>
       </div>
     </div>
     <div class="win-stats" id="win-stats"></div>
     <button class="btn" onclick="backToMenu()">NEW MISSION</button>
+    <div class="brand-footer">
+      A <a href="https://diamondsky.au/" target="_blank" rel="noopener">Diamond Sky</a> project
+      &nbsp;·&nbsp;
+      <a href="https://www.linkedin.com/in/georgedyke/" target="_blank" rel="noopener">LinkedIn</a>
+    </div>
   </div>
 
 </div>
@@ -635,6 +649,18 @@ function buildNASAUrl(imgSize, scene){
     `&BBOX=${minLon},${minLat},${maxLon},${maxLat}`;
 }
 
+function buildNASAViewerUrl(scene){
+  const [minLon,minLat,maxLon,maxLat] = scene.bbox;
+  return `https://worldview.earthdata.nasa.gov/?v=${minLon},${minLat},${maxLon},${maxLat}`+
+    `&t=${getImageDate()}&l=MODIS_Terra_CorrectedReflectance_TrueColor`;
+}
+
+function buildESAViewerUrl(scene){
+  const {lat,lon} = bboxCenter(scene.bbox);
+  return `https://browser.dataspace.copernicus.eu/?zoom=9&lat=${lat}&lng=${lon}`+
+    `&themeId=DEFAULT-THEME&datasetId=S2_L2A_CDAS`;
+}
+
 function populateSceneInfo(nameId, metaId, mapsId, imgId){
   document.getElementById(nameId).textContent = currentSceneName.toUpperCase();
   document.getElementById(metaId).textContent =
@@ -698,7 +724,7 @@ async function startGame(){
     try {
       sourceImage = await fetchNASAImage(imgSize, nasaScene);
       currentSceneName = nasaScene.name;
-      currentImageUrl = buildNASAUrl(imgSize, nasaScene);
+      currentImageUrl = buildNASAViewerUrl(nasaScene);
       console.log('[ORBITAL] NASA success:', nasaScene.name);
     } catch(e) {
       console.warn('[ORBITAL] NASA failed:', e.message, '— trying OSM');
@@ -717,7 +743,7 @@ async function startGame(){
     try {
       sourceImage = await fetchESAImage(imgSize, nasaScene);
       currentSceneName = nasaScene.name;
-      currentImageUrl = buildESAUrl(imgSize, nasaScene);
+      currentImageUrl = buildESAViewerUrl(nasaScene);
       console.log('[ORBITAL] ESA success:', nasaScene.name);
     } catch(e) {
       console.warn('[ORBITAL] ESA failed:', e.message, '— trying OSM');
