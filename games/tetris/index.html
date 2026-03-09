@@ -47,7 +47,7 @@
     pointer-events: none; z-index: 0;
   }
 
-  #app { position: relative; z-index: 1; width: 100%; max-width: 920px; padding: 10px; }
+  #app { position: relative; z-index: 1; width: 100%; max-width: 1200px; padding: 10px; }
 
   /* ── MENU ── */
   #menu-screen { display: flex; flex-direction: column; align-items: center; gap: 28px; }
@@ -91,7 +91,7 @@
   /* ── GAME ── */
   #game-screen { display: none; }
 
-  .game-layout { display: grid; grid-template-columns: 130px auto 150px; gap: 16px; align-items: start; }
+  .game-layout { display: grid; grid-template-columns: 160px auto 200px; gap: 20px; align-items: start; }
 
   .hud-col { display:flex; flex-direction:column; gap:12px; padding-top:4px; }
 
@@ -230,13 +230,13 @@
         <div class="hud-box">
           <div class="hud-label">Target Image</div>
           <div class="ref-wrap">
-            <canvas id="ref-canvas" width="128" height="128"></canvas>
+            <canvas id="ref-canvas" width="180" height="180"></canvas>
             <div class="ref-highlight" id="ref-highlight" style="display:none"></div>
           </div>
         </div>
         <div class="hud-box">
           <div class="hud-label">Falling</div>
-          <canvas id="next-canvas" width="106" height="106" style="image-rendering:pixelated;display:block;"></canvas>
+          <canvas id="next-canvas" width="140" height="140" style="image-rendering:pixelated;display:block;"></canvas>
         </div>
         <div class="hud-box">
           <div class="hud-label">Controls</div>
@@ -269,6 +269,12 @@
 <div class="msg-overlay" id="msg-overlay"></div>
 
 <script>
+// ── Recent date for NASA GIBS (imagery has ~3 day processing lag) ──
+function getImageDate(){
+  const d = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+  return d.toISOString().slice(0,10);
+}
+
 // ── Seeded RNG ──
 function makeRng(seed) {
   let s = seed;
@@ -434,7 +440,7 @@ window.addEventListener('DOMContentLoaded',()=>{
       `SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap`+
       `&LAYERS=MODIS_Terra_CorrectedReflectance_TrueColor`+
       `&SRS=EPSG:4326&STYLES=&FORMAT=image/jpeg`+
-      `&TIME=2024-06-15&WIDTH=120&HEIGHT=120`+
+      `&TIME=${getImageDate()}&WIDTH=120&HEIGHT=120`+
       `&BBOX=${minLon},${minLat},${maxLon},${maxLat}`;
     fetch(nasaUrl)
       .then(r=>r.blob()).then(b=>createImageBitmap(b))
@@ -487,7 +493,7 @@ async function fetchNASAImage(imgSize, scene){
     `SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap`+
     `&LAYERS=MODIS_Terra_CorrectedReflectance_TrueColor`+
     `&SRS=EPSG:4326&STYLES=&FORMAT=image/jpeg`+
-    `&TIME=2024-06-15&WIDTH=${imgSize}&HEIGHT=${imgSize}`+
+    `&TIME=${getImageDate()}&WIDTH=${imgSize}&HEIGHT=${imgSize}`+
     `&BBOX=${minLon},${minLat},${maxLon},${maxLat}`;
   console.log('[ORBITAL] Trying NASA GIBS:', scene.name);
   const timeout = new Promise((_,rej) => setTimeout(()=>rej(new Error('timeout')), 8000));
@@ -541,7 +547,7 @@ async function startGame(){
   const availW = window.innerWidth - 150*2 - 16*2 - 32;
   const maxByHeight = Math.floor(availH / (gridN + FALL_ROWS));
   const maxByWidth  = Math.floor(availW / gridN);
-  TS = Math.max(32, Math.min(64, maxByHeight, maxByWidth));
+  TS = Math.max(32, Math.min(96, maxByHeight, maxByWidth));
   tileSize=TS;
   const imgSize=gridN*TS;
 
@@ -618,7 +624,7 @@ async function startGame(){
 
   // Draw reference image
   const rc=document.getElementById('ref-canvas');
-  rc.getContext('2d').drawImage(sourceImage,0,0,128,128);
+  rc.getContext('2d').drawImage(sourceImage,0,0,180,180);
 
   spawnTile();
   gameRunning=true; lastTime=performance.now();
@@ -660,24 +666,24 @@ function spawnTile(){
 
 function refreshNextPreview(){
   const c=document.getElementById('next-canvas');
-  const ctx=c.getContext('2d'); ctx.clearRect(0,0,106,106);
+  const SZ=140;
+  const ctx=c.getContext('2d'); ctx.clearRect(0,0,SZ,SZ);
   if(!cur) return;
   const t=tiles[cur.tileIdx];
 
-  // Draw tile rotated, scaled to fill the 106px canvas
-  // We need to draw at a different size so use a temp approach
-  ctx.save(); ctx.translate(53,53); ctx.rotate(cur.rotation*Math.PI/2);
-  ctx.drawImage(t.cachedCanvas,-53,-53,106,106); ctx.restore();
+  // Draw tile rotated, scaled to fill the canvas
+  ctx.save(); ctx.translate(SZ/2,SZ/2); ctx.rotate(cur.rotation*Math.PI/2);
+  ctx.drawImage(t.cachedCanvas,-SZ/2,-SZ/2,SZ,SZ); ctx.restore();
 
-  // Edge strips scaled to 106px (strip width proportional)
-  const scale=106/TS;
+  // Edge strips
+  const scale=SZ/TS;
   const W=Math.round(5*scale);
   const rotated=[0,1,2,3].map(i=>t.edges[(i+4-cur.rotation)%4]);
   ctx.globalAlpha=0.9;
-  ctx.fillStyle=rotated[0]; ctx.fillRect(0,0,106,W);
-  ctx.fillStyle=rotated[1]; ctx.fillRect(106-W,0,W,106);
-  ctx.fillStyle=rotated[2]; ctx.fillRect(0,106-W,106,W);
-  ctx.fillStyle=rotated[3]; ctx.fillRect(0,0,W,106);
+  ctx.fillStyle=rotated[0]; ctx.fillRect(0,0,SZ,W);
+  ctx.fillStyle=rotated[1]; ctx.fillRect(SZ-W,0,W,SZ);
+  ctx.fillStyle=rotated[2]; ctx.fillRect(0,SZ-W,SZ,W);
+  ctx.fillStyle=rotated[3]; ctx.fillRect(0,0,W,SZ);
   ctx.globalAlpha=1;
 
   // Highlight on reference image
