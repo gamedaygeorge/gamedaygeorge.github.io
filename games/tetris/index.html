@@ -188,6 +188,7 @@
       <div class="menu-section-title">Data Source</div>
       <div class="grid-btns">
         <button class="btn sm active" onclick="setSource('nasa')" id="src-nasa">NASA</button>
+        <button class="btn sm" onclick="setSource('esa')" id="src-esa">ESA</button>
         <button class="btn sm" onclick="setSource('osm')" id="src-osm">OSM</button>
       </div>
     </div>
@@ -221,7 +222,7 @@
   <!-- LOADING -->
   <div id="loading-screen">
     <div class="loading-title">ACQUIRING SIGNAL</div>
-    <div class="loading-sub">Fetching NASA satellite imagery…</div>
+    <div class="loading-sub" id="loading-sub">Fetching satellite imagery…</div>
     <div class="loading-bar-wrap"><div class="loading-bar"></div></div>
   </div>
 
@@ -298,6 +299,14 @@
   <div id="win-screen">
     <div class="win-title">MISSION COMPLETE</div>
     <canvas id="win-canvas"></canvas>
+    <div class="scene-info" style="margin-top:8px;">
+      <div class="scene-name" id="win-scene-name">—</div>
+      <div class="scene-meta" id="win-scene-meta">—</div>
+      <div class="scene-links">
+        <a id="win-maps-link" href="#" target="_blank" rel="noopener">Maps ↗</a>
+        <a id="win-img-link" href="#" target="_blank" rel="noopener" style="display:none">Image ↗</a>
+      </div>
+    </div>
     <div class="win-stats" id="win-stats"></div>
     <button class="btn" onclick="backToMenu()">NEW MISSION</button>
   </div>
@@ -465,7 +474,7 @@ function setGrid(n){
 }
 function setSource(s){
   selSource=s;
-  ['nasa','osm'].forEach(x=>document.getElementById('src-'+x).classList.toggle('active',x===s));
+  ['nasa','esa','osm'].forEach(x=>document.getElementById('src-'+x).classList.toggle('active',x===s));
 }
 function setDifficulty(d){
   selDifficulty=d;
@@ -580,6 +589,8 @@ async function fetchOSMImage(imgSize, scene){
 let TS = 64;
 let currentSceneName = '';
 let currentScene = null;
+let currentImageUrl = '';
+let currentImageDate = '';
 let selSpeed = 'normal';
 let baseFallInterval = 1800;
 const SPEED_MAP = { slow: 2800, normal: 1800, fast: 900 };
@@ -618,9 +629,37 @@ function buildNASAUrl(imgSize, scene){
     `&BBOX=${minLon},${minLat},${maxLon},${maxLat}`;
 }
 
+function populateSceneInfo(nameId, metaId, mapsId, imgId){
+  document.getElementById(nameId).textContent = currentSceneName.toUpperCase();
+  document.getElementById(metaId).textContent =
+    currentScene.type + '  •  ' + formatLatLon(currentScene.bbox) + '  •  ' + currentImageDate;
+  document.getElementById(mapsId).href = buildMapsUrl(currentScene.bbox);
+  const imgEl = document.getElementById(imgId);
+  if(currentImageUrl){ imgEl.href = currentImageUrl; imgEl.style.display = ''; }
+  else { imgEl.style.display = 'none'; }
+}
+
 function buildOSMUrl(bbox){
   const {lat,lon} = bboxCenter(bbox);
   return `https://www.openstreetmap.org/#map=10/${lat}/${lon}`;
+}
+
+function buildESAUrl(imgSize, scene){
+  const [minLon,minLat,maxLon,maxLat] = scene.bbox;
+  return `https://tiles.maps.eox.at/wms?SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1`+
+    `&LAYERS=s2cloudless-2021&FORMAT=image/jpeg&STYLES=`+
+    `&SRS=EPSG:4326&WIDTH=${imgSize}&HEIGHT=${imgSize}`+
+    `&BBOX=${minLon},${minLat},${maxLon},${maxLat}`;
+}
+
+async function fetchESAImage(imgSize, scene){
+  const url = buildESAUrl(imgSize, scene);
+  console.log('[ORBITAL] Trying ESA Sentinel-2:', scene.name);
+  const timeout = new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),8000));
+  const load = fetch(url).then(r=>{ if(!r.ok) throw new Error(`HTTP ${r.status}`); return r.blob(); })
+    .then(blob=>createImageBitmap(blob))
+    .then(bmp=>{ const c=document.createElement('canvas'); c.width=c.height=imgSize; c.getContext('2d').drawImage(bmp,0,0,imgSize,imgSize); bmp.close(); return c; });
+  return Promise.race([load, timeout]);
 }
 
 async function startGame(){
@@ -637,6 +676,8 @@ async function startGame(){
   const imgSize=gridN*TS;
 
   document.getElementById('menu-screen').style.display='none';
+  const loadingSubs = { nasa:'Fetching NASA MODIS satellite imagery…', esa:'Fetching ESA Sentinel-2 imagery…', osm:'Fetching OpenStreetMap tiles…' };
+  document.getElementById('loading-sub').textContent = loadingSubs[selSource];
   document.getElementById('loading-screen').style.display='flex';
 
   const idx = Math.floor(Math.random()*NASA_SCENES.length);
@@ -644,57 +685,65 @@ async function startGame(){
   const osmScene  = OSM_SCENES[idx];
   currentScene = nasaScene;
 
-  const imageDate = getImageDate();
-  let imageUrl = '';
+  currentImageDate = getImageDate();
+  currentImageUrl = '';
 
   if(selSource === 'nasa'){
-    // 1. Try NASA GIBS (real satellite)
     try {
       sourceImage = await fetchNASAImage(imgSize, nasaScene);
       currentSceneName = nasaScene.name;
-      imageUrl = buildNASAUrl(imgSize, nasaScene);
+      currentImageUrl = buildNASAUrl(imgSize, nasaScene);
       console.log('[ORBITAL] NASA success:', nasaScene.name);
     } catch(e) {
       console.warn('[ORBITAL] NASA failed:', e.message, '— trying OSM');
-      // 2. OSM fallback
       try {
         sourceImage = await fetchOSMImage(imgSize, osmScene);
         currentSceneName = osmScene.name;
-        imageUrl = buildOSMUrl(nasaScene.bbox);
-        console.log('[ORBITAL] OSM success:', osmScene.name);
+        currentImageUrl = buildOSMUrl(nasaScene.bbox);
+        console.log('[ORBITAL] OSM fallback success');
       } catch(e2) {
         console.warn('[ORBITAL] OSM failed:', e2.message, '— using procedural');
         sourceImage = genNASA(imgSize);
         currentSceneName = nasaScene.name + ' (procedural)';
-        imageUrl = '';
+      }
+    }
+  } else if(selSource === 'esa'){
+    try {
+      sourceImage = await fetchESAImage(imgSize, nasaScene);
+      currentSceneName = nasaScene.name;
+      currentImageUrl = buildESAUrl(imgSize, nasaScene);
+      console.log('[ORBITAL] ESA success:', nasaScene.name);
+    } catch(e) {
+      console.warn('[ORBITAL] ESA failed:', e.message, '— trying OSM');
+      try {
+        sourceImage = await fetchOSMImage(imgSize, osmScene);
+        currentSceneName = osmScene.name;
+        currentImageUrl = buildOSMUrl(nasaScene.bbox);
+        console.log('[ORBITAL] OSM fallback success');
+      } catch(e2) {
+        console.warn('[ORBITAL] OSM failed:', e2.message, '— using procedural');
+        sourceImage = genNASA(imgSize);
+        currentSceneName = nasaScene.name + ' (procedural)';
       }
     }
   } else {
-    // OSM only — no NASA fallback
+    // OSM only
     try {
       sourceImage = await fetchOSMImage(imgSize, osmScene);
       currentSceneName = osmScene.name;
-      imageUrl = buildOSMUrl(nasaScene.bbox);
+      currentImageUrl = buildOSMUrl(nasaScene.bbox);
       console.log('[ORBITAL] OSM success:', osmScene.name);
     } catch(e) {
       console.warn('[ORBITAL] OSM failed:', e.message, '— using procedural');
       sourceImage = genNASA(imgSize);
       currentSceneName = nasaScene.name + ' (procedural)';
-      imageUrl = '';
     }
   }
 
   document.getElementById('loading-screen').style.display='none';
   document.getElementById('game-screen').style.display='block';
 
-  document.getElementById('scene-name-disp').textContent = currentSceneName.toUpperCase();
-  document.getElementById('scene-meta-disp').textContent =
-    currentScene.type + '  •  ' + formatLatLon(currentScene.bbox) + '  •  ' + imageDate;
-  const mapsLink = document.getElementById('maps-link');
-  mapsLink.href = buildMapsUrl(currentScene.bbox);
-  const imgLink = document.getElementById('img-link');
-  if(imageUrl){ imgLink.href = imageUrl; imgLink.style.display = ''; }
-  else { imgLink.style.display = 'none'; }
+  populateSceneInfo('scene-name-disp','scene-meta-disp','maps-link','img-link');
 
   // Slice tiles + compute edge colours
   tiles=[]; locked=Array.from({length:gridN},()=>Array(gridN).fill(false));
@@ -1063,6 +1112,7 @@ function winGame(){
   document.getElementById('game-screen').style.display='none';
   document.getElementById('win-screen').style.display='flex';
   const t=Math.floor((Date.now()-startTime)/1000);
+  populateSceneInfo('win-scene-name','win-scene-meta','win-maps-link','win-img-link');
   document.getElementById('win-stats').innerHTML=
     `Score: <strong>${score}</strong><br>Time: <strong>${Math.floor(t/60)}m ${t%60}s</strong><br>Misses: <strong>${misses}</strong><br>Tiles: <strong>${totalTiles}</strong>`;
   const wc=document.getElementById('win-canvas');
