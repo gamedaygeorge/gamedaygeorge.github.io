@@ -244,7 +244,8 @@
             <span>← →</span> Move<br>
             <span>↑</span> Rotate<br>
             <span>↓</span> Faster<br>
-            <span>SPACE</span> Drop
+            <span>SPACE</span> Drop<br>
+            <span>ESC</span> Menu
           </div>
         </div>
         <div class="hud-box">
@@ -917,6 +918,7 @@ function drawEdgeStripsSelective(ctx, x, y, edges, rot, exposed, alpha){
 
 // ── Input ──
 document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){ backToMenu(); e.preventDefault(); return; }
   if(!gameRunning||!cur) return;
   if(e.key==='ArrowLeft'){if(cur.col>0){cur.col--;refreshNextPreview();}}
   else if(e.key==='ArrowRight'){if(cur.col<gridN-1){cur.col++;refreshNextPreview();}}
