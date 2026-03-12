@@ -287,7 +287,7 @@
         <button class="btn sm coming-soon" onclick="showSARNote()">SAR</button>
       </div>
       <div class="src-note" id="src-note"></div>
-      <div class="menu-section-desc">NASA MODIS, ESA Sentinel-2, and Landsat 8/9 fetch real satellite imagery. OSM uses map tiles.</div>
+      <div class="menu-section-desc">NASA MODIS and ESA Sentinel-2 fetch live imagery. Landsat uses USGS Earth as Art. OSM uses map tiles.</div>
     </div>
     <div>
       <div class="menu-section-title">Grid Size</div>
@@ -842,28 +842,38 @@ function buildOSMUrl(bbox){
   return `https://www.openstreetmap.org/#map=10/${lat}/${lon}`;
 }
 
-function buildLandsatUrl(imgSize, scene){
-  // NASA Planetary/Earth Imagery API — returns Landsat 8/9 JPEG by lat/lon
-  // DEMO_KEY: 30 req/hr per IP, no registration needed
-  const {lat,lon} = bboxCenter(scene.bbox);
-  const dim = scene.dim || 1.0;
-  return `https://api.nasa.gov/planetary/earth/imagery?`+
-    `lon=${lon}&lat=${lat}&date=${getImageDate()}&dim=${dim}&api_key=DEMO_KEY`;
-}
-
-function buildLandsatViewerUrl(scene){
-  const {lat,lon} = bboxCenter(scene.bbox);
-  return `https://landsatlook.usgs.gov/explore?lat=${lat}&lng=${lon}&zoom=9`;
-}
+// ── Landsat — USGS Earth as Art (local, same-origin, no CORS issues) ──
+// Images sourced from https://eros.usgs.gov/media-gallery/earth-as-art
+// US federal government works, public domain.
+const LANDSAT_IMAGES = [
+  { name:'Deep Blue Cubism',    file:'deep-blue-cubism.jpg',    type:'Coastal'  },
+  { name:'Desert Ribbons',      file:'desert-ribbons.jpg',      type:'Arid'     },
+  { name:'Sand Waves',          file:'sand-waves.jpg',          type:'Arid'     },
+  { name:'Blue Ice',            file:'blue-ice.jpg',            type:'Polar'    },
+  { name:'Copper and Blue',     file:'copper-and-blue.jpg',     type:'Alpine'   },
+  { name:'Luminescence',        file:'luminescence.jpg',        type:'Coastal'  },
+  { name:'Mezen Mixing',        file:'mezen-mixing.jpg',        type:'Coastal'  },
+  { name:'Salty Desolation',    file:'salty-desolation.jpg',    type:'Arid'     },
+  { name:'Painting the Desert', file:'painting-the-desert.jpg', type:'Arid'     },
+  { name:'Wondrous Wetlands',   file:'wondrous-wetlands.jpg',   type:'Tropical' },
+];
 
 async function fetchLandsatImage(imgSize, scene){
-  const url = buildLandsatUrl(imgSize, scene);
-  console.log('[ORBITAL] Trying Landsat (NASA Earth API):', scene.name);
-  const timeout = new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),12000));
-  const load = fetch(url).then(r=>{ if(!r.ok) throw new Error(`HTTP ${r.status}`); return r.blob(); })
-    .then(blob=>createImageBitmap(blob))
-    .then(bmp=>{ const c=document.createElement('canvas'); c.width=c.height=imgSize; c.getContext('2d').drawImage(bmp,0,0,imgSize,imgSize); bmp.close(); return c; });
-  return Promise.race([load, timeout]);
+  const pick = LANDSAT_IMAGES[Math.floor(Math.random() * LANDSAT_IMAGES.length)];
+  const url = `./images/landsat/${pick.file}`;
+  console.log('[ORBITAL] Loading Landsat:', pick.name);
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas'); c.width = c.height = imgSize;
+      c.getContext('2d').drawImage(img, 0, 0, imgSize, imgSize);
+      // Attach metadata so startGame() can use it
+      c._landsatMeta = pick;
+      resolve(c);
+    };
+    img.onerror = () => reject(new Error('local image load failed'));
+    img.src = url;
+  });
 }
 
 function buildESAUrl(imgSize, scene){
@@ -907,7 +917,7 @@ async function startGame(){
   const imgSize=gridN*TS;
 
   document.getElementById('menu-screen').style.display='none';
-  const loadingSubs = { nasa:'Fetching NASA MODIS satellite imagery…', esa:'Fetching ESA Sentinel-2 imagery…', landsat:'Fetching Landsat 8/9 imagery…', osm:'Fetching OpenStreetMap tiles…' };
+  const loadingSubs = { nasa:'Fetching NASA MODIS satellite imagery…', esa:'Fetching ESA Sentinel-2 imagery…', landsat:'Loading USGS Landsat Earth as Art…', osm:'Fetching OpenStreetMap tiles…' };
   document.getElementById('loading-sub').textContent = loadingSubs[selSource];
   document.getElementById('loading-screen').style.display='flex';
 
@@ -942,22 +952,16 @@ async function startGame(){
   } else if(selSource === 'landsat'){
     try {
       sourceImage = await fetchLandsatImage(imgSize, nasaScene);
-      currentSceneName = nasaScene.name;
-      currentImageUrl = buildLandsatViewerUrl(nasaScene);
-      currentRawImageUrl = buildLandsatUrl(imgSize, nasaScene);
-      console.log('[ORBITAL] Landsat success:', nasaScene.name);
+      const meta = sourceImage._landsatMeta;
+      currentSceneName = meta.name;
+      currentScene = { ...currentScene, type: meta.type }; // override scene type
+      currentImageUrl = 'https://eros.usgs.gov/media-gallery/earth-as-art/earth-as-art-6';
+      currentRawImageUrl = `https://eros.usgs.gov/sites/eros.usgs.gov/files/imagegallery/${meta.file.replace(/^0*\d+-/, '').replace(/\.jpg$/, '')}.jpg`;
+      console.log('[ORBITAL] Landsat success:', meta.name);
     } catch(e) {
-      console.warn('[ORBITAL] Landsat failed:', e.message, '— trying OSM');
-      try {
-        sourceImage = await fetchOSMImage(imgSize, osmScene);
-        currentSceneName = osmScene.name;
-        currentImageUrl = buildOSMUrl(nasaScene.bbox); currentRawImageUrl = '';
-        console.log('[ORBITAL] OSM fallback success');
-      } catch(e2) {
-        console.warn('[ORBITAL] OSM failed:', e2.message, '— using procedural');
-        sourceImage = genNASA(imgSize);
-        currentSceneName = nasaScene.name + ' (procedural)'; currentRawImageUrl = '';
-      }
+      console.warn('[ORBITAL] Landsat failed:', e.message, '— using procedural');
+      sourceImage = genNASA(imgSize);
+      currentSceneName = nasaScene.name + ' (procedural)'; currentRawImageUrl = '';
     }
   } else if(selSource === 'esa'){
     try {
