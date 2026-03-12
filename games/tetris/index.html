@@ -282,11 +282,12 @@
       <div class="grid-btns">
         <button class="btn sm active" onclick="setSource('nasa')" id="src-nasa">NASA</button>
         <button class="btn sm" onclick="setSource('esa')" id="src-esa">ESA</button>
+        <button class="btn sm" onclick="setSource('landsat')" id="src-landsat">Landsat</button>
         <button class="btn sm" onclick="setSource('osm')" id="src-osm">OSM</button>
         <button class="btn sm coming-soon" onclick="showSARNote()">SAR</button>
       </div>
       <div class="src-note" id="src-note"></div>
-      <div class="menu-section-desc">NASA MODIS and ESA Sentinel-2 fetch real satellite imagery. OSM uses map tiles.</div>
+      <div class="menu-section-desc">NASA MODIS and ESA Sentinel-2 fetch live imagery. Landsat uses USGS Earth as Art. OSM uses map tiles.</div>
     </div>
     <div>
       <div class="menu-section-title">Grid Size</div>
@@ -646,7 +647,7 @@ function setGrid(n){
 }
 function setSource(s){
   selSource=s;
-  ['nasa','esa','osm'].forEach(x=>document.getElementById('src-'+x).classList.toggle('active',x===s));
+  ['nasa','esa','landsat','osm'].forEach(x=>document.getElementById('src-'+x).classList.toggle('active',x===s));
   document.getElementById('src-note').textContent='';
 }
 function showSARNote(){
@@ -696,16 +697,16 @@ window.addEventListener('DOMContentLoaded',()=>{
 
 // ── NASA GIBS scenes (WMS, true-colour MODIS satellite imagery) ──
 const NASA_SCENES = [
-  { name:'Amazon Rainforest',   bbox:[-65,-10,-45,10],        type:'Tropical'  },
-  { name:'Sahara Desert',       bbox:[0,18,30,35],            type:'Arid'      },
-  { name:'Himalayas',           bbox:[78,26,98,36],           type:'Alpine'    },
-  { name:'Great Barrier Reef',  bbox:[142,-24,154,-14],       type:'Coastal'   },
-  { name:'Greenland',           bbox:[-55,60,-20,80],         type:'Polar'     },
-  { name:'Grand Canyon',        bbox:[-114.5,35.5,-111,37.5], type:'Arid'      },
-  { name:'Nile Delta',          bbox:[29,29,33,32],           type:'Coastal'   },
-  { name:'Maldives',            bbox:[72,1,74,4],             type:'Tropical'  },
-  { name:'Iceland',             bbox:[-25,63,-12,67],         type:'Volcanic'  },
-  { name:'Patagonia',           bbox:[-75,-55,-65,-45],       type:'Alpine'    },
+  { name:'Amazon Rainforest',   bbox:[-65,-10,-45,10],        type:'Tropical',  dim:3.0 },
+  { name:'Sahara Desert',       bbox:[0,18,30,35],            type:'Arid',      dim:4.0 },
+  { name:'Himalayas',           bbox:[78,26,98,36],           type:'Alpine',    dim:3.0 },
+  { name:'Great Barrier Reef',  bbox:[142,-24,154,-14],       type:'Coastal',   dim:2.0 },
+  { name:'Greenland',           bbox:[-55,60,-20,80],         type:'Polar',     dim:4.0 },
+  { name:'Grand Canyon',        bbox:[-114.5,35.5,-111,37.5], type:'Arid',      dim:0.5 },
+  { name:'Nile Delta',          bbox:[29,29,33,32],           type:'Coastal',   dim:0.8 },
+  { name:'Maldives',            bbox:[72,1,74,4],             type:'Tropical',  dim:0.5 },
+  { name:'Iceland',             bbox:[-25,63,-12,67],         type:'Volcanic',  dim:2.5 },
+  { name:'Patagonia',           bbox:[-75,-55,-65,-45],       type:'Alpine',    dim:3.0 },
 ];
 
 // ── OSM scenes (fallback) ──
@@ -841,6 +842,36 @@ function buildOSMUrl(bbox){
   return `https://www.openstreetmap.org/#map=10/${lat}/${lon}`;
 }
 
+// ── Landsat — USGS Earth as Art (local, same-origin, no CORS issues) ──
+// Images sourced from https://eros.usgs.gov/media-gallery/earth-as-art
+// US federal government works, public domain.
+const LANDSAT_IMAGES = [
+  { name:'Deep Blue Cubism',    file:'deep-blue-cubism.jpg',    type:'Coastal'  },
+  { name:'Desert Ribbons',      file:'desert-ribbons.jpg',      type:'Arid'     },
+  { name:'Sand Waves',          file:'sand-waves.jpg',          type:'Arid'     },
+  { name:'Blue Ice',            file:'blue-ice.jpg',            type:'Polar'    },
+  { name:'Copper and Blue',     file:'copper-and-blue.jpg',     type:'Alpine'   },
+  { name:'Luminescence',        file:'luminescence.jpg',        type:'Coastal'  },
+  { name:'Mezen Mixing',        file:'mezen-mixing.jpg',        type:'Coastal'  },
+  { name:'Salty Desolation',    file:'salty-desolation.jpg',    type:'Arid'     },
+  { name:'Painting the Desert', file:'painting-the-desert.jpg', type:'Arid'     },
+  { name:'Wondrous Wetlands',   file:'wondrous-wetlands.jpg',   type:'Tropical' },
+];
+
+async function fetchLandsatImage(imgSize, scene){
+  const pick = LANDSAT_IMAGES[Math.floor(Math.random() * LANDSAT_IMAGES.length)];
+  const url = `./images/landsat/${pick.file}`;
+  console.log('[ORBITAL] Loading Landsat:', pick.name);
+  // Use fetch + createImageBitmap (same pattern as other sources) to avoid canvas taint
+  const blob = await fetch(url).then(r => { if(!r.ok) throw new Error(`HTTP ${r.status}`); return r.blob(); });
+  const bmp = await createImageBitmap(blob);
+  const c = document.createElement('canvas'); c.width = c.height = imgSize;
+  c.getContext('2d').drawImage(bmp, 0, 0, imgSize, imgSize);
+  bmp.close();
+  c._landsatMeta = pick;
+  return c;
+}
+
 function buildESAUrl(imgSize, scene){
   const [minLon,minLat,maxLon,maxLat] = scene.bbox;
   return `https://tiles.maps.eox.at/wms?SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1`+
@@ -882,7 +913,7 @@ async function startGame(){
   const imgSize=gridN*TS;
 
   document.getElementById('menu-screen').style.display='none';
-  const loadingSubs = { nasa:'Fetching NASA MODIS satellite imagery…', esa:'Fetching ESA Sentinel-2 imagery…', osm:'Fetching OpenStreetMap tiles…' };
+  const loadingSubs = { nasa:'Fetching NASA MODIS satellite imagery…', esa:'Fetching ESA Sentinel-2 imagery…', landsat:'Loading USGS Landsat Earth as Art…', osm:'Fetching OpenStreetMap tiles…' };
   document.getElementById('loading-sub').textContent = loadingSubs[selSource];
   document.getElementById('loading-screen').style.display='flex';
 
@@ -913,6 +944,20 @@ async function startGame(){
         sourceImage = genNASA(imgSize);
         currentSceneName = nasaScene.name + ' (procedural)'; currentRawImageUrl = '';
       }
+    }
+  } else if(selSource === 'landsat'){
+    try {
+      sourceImage = await fetchLandsatImage(imgSize, nasaScene);
+      const meta = sourceImage._landsatMeta;
+      currentSceneName = meta.name;
+      currentScene = { ...currentScene, type: meta.type }; // override scene type
+      currentImageUrl = 'https://eros.usgs.gov/media-gallery/earth-as-art/earth-as-art-6';
+      currentRawImageUrl = `https://eros.usgs.gov/sites/eros.usgs.gov/files/imagegallery/${meta.file.replace(/^0*\d+-/, '').replace(/\.jpg$/, '')}.jpg`;
+      console.log('[ORBITAL] Landsat success:', meta.name);
+    } catch(e) {
+      console.warn('[ORBITAL] Landsat failed:', e.message, '— using procedural');
+      sourceImage = genNASA(imgSize);
+      currentSceneName = nasaScene.name + ' (procedural)'; currentRawImageUrl = '';
     }
   } else if(selSource === 'esa'){
     try {
