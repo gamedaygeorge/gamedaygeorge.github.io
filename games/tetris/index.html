@@ -771,6 +771,7 @@ let currentSceneName = '';
 let currentScene = null;
 let currentImageUrl = '';    // viewer URL (NASA Worldview / Copernicus / OSM map)
 let currentRawImageUrl = ''; // direct image URL (WMS JPEG etc.)
+let currentMapsUrl = '';     // maps link (empty = hide)
 let currentImageDate = '';
 let selSpeed = 'normal';
 let baseFallInterval = 1800;
@@ -826,7 +827,9 @@ function populateSceneInfo(nameId, metaId, mapsId, viewId, rawId){
   document.getElementById(nameId).textContent = currentSceneName.toUpperCase();
   document.getElementById(metaId).textContent =
     currentScene.type + '  •  ' + formatLatLon(currentScene.bbox) + '  •  ' + currentImageDate;
-  document.getElementById(mapsId).href = buildMapsUrl(currentScene.bbox);
+  const mapsEl = document.getElementById(mapsId);
+  if(currentMapsUrl){ mapsEl.href = currentMapsUrl; mapsEl.style.display = ''; }
+  else { mapsEl.style.display = 'none'; }
   const viewEl = document.getElementById(viewId);
   if(currentImageUrl){ viewEl.href = currentImageUrl; viewEl.style.display = ''; }
   else { viewEl.style.display = 'none'; }
@@ -923,7 +926,7 @@ async function startGame(){
   currentScene = nasaScene;
 
   currentImageDate = getImageDate();
-  currentImageUrl = '';
+  currentImageUrl = ''; currentMapsUrl = '';
 
   if(selSource === 'nasa'){
     try {
@@ -931,13 +934,14 @@ async function startGame(){
       currentSceneName = nasaScene.name;
       currentImageUrl = buildNASAViewerUrl(nasaScene);
       currentRawImageUrl = buildNASAUrl(imgSize, nasaScene);
+      currentMapsUrl = buildMapsUrl(nasaScene.bbox);
       console.log('[ORBITAL] NASA success:', nasaScene.name);
     } catch(e) {
       console.warn('[ORBITAL] NASA failed:', e.message, '— trying OSM');
       try {
         sourceImage = await fetchOSMImage(imgSize, osmScene);
         currentSceneName = osmScene.name;
-        currentImageUrl = buildOSMUrl(nasaScene.bbox); currentRawImageUrl = '';
+        currentImageUrl = buildOSMUrl(nasaScene.bbox); currentRawImageUrl = ''; currentMapsUrl = buildMapsUrl(nasaScene.bbox);
         console.log('[ORBITAL] OSM fallback success');
       } catch(e2) {
         console.warn('[ORBITAL] OSM failed:', e2.message, '— using procedural');
@@ -950,9 +954,9 @@ async function startGame(){
       sourceImage = await fetchLandsatImage(imgSize, nasaScene);
       const meta = sourceImage._landsatMeta;
       currentSceneName = meta.name;
-      currentScene = { ...currentScene, type: meta.type }; // override scene type
+      currentScene = { ...currentScene, type: meta.type };
       currentImageUrl = 'https://eros.usgs.gov/media-gallery/earth-as-art/earth-as-art-6';
-      currentRawImageUrl = `https://eros.usgs.gov/sites/eros.usgs.gov/files/imagegallery/${meta.file.replace(/^0*\d+-/, '').replace(/\.jpg$/, '')}.jpg`;
+      currentRawImageUrl = ''; currentMapsUrl = '';
       console.log('[ORBITAL] Landsat success:', meta.name);
     } catch(e) {
       console.warn('[ORBITAL] Landsat failed:', e.message, '— using procedural');
@@ -965,13 +969,14 @@ async function startGame(){
       currentSceneName = nasaScene.name;
       currentImageUrl = buildESAViewerUrl(nasaScene);
       currentRawImageUrl = buildESAUrl(imgSize, nasaScene);
+      currentMapsUrl = buildMapsUrl(nasaScene.bbox);
       console.log('[ORBITAL] ESA success:', nasaScene.name);
     } catch(e) {
       console.warn('[ORBITAL] ESA failed:', e.message, '— trying OSM');
       try {
         sourceImage = await fetchOSMImage(imgSize, osmScene);
         currentSceneName = osmScene.name;
-        currentImageUrl = buildOSMUrl(nasaScene.bbox); currentRawImageUrl = '';
+        currentImageUrl = buildOSMUrl(nasaScene.bbox); currentRawImageUrl = ''; currentMapsUrl = buildMapsUrl(nasaScene.bbox);
         console.log('[ORBITAL] OSM fallback success');
       } catch(e2) {
         console.warn('[ORBITAL] OSM failed:', e2.message, '— using procedural');
@@ -984,7 +989,7 @@ async function startGame(){
     try {
       sourceImage = await fetchOSMImage(imgSize, osmScene);
       currentSceneName = osmScene.name;
-      currentImageUrl = buildOSMUrl(nasaScene.bbox);
+      currentImageUrl = buildOSMUrl(nasaScene.bbox); currentMapsUrl = buildMapsUrl(nasaScene.bbox);
       console.log('[ORBITAL] OSM success:', osmScene.name);
     } catch(e) {
       console.warn('[ORBITAL] OSM failed:', e.message, '— using procedural');
