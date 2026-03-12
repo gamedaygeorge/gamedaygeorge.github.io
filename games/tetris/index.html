@@ -697,16 +697,16 @@ window.addEventListener('DOMContentLoaded',()=>{
 
 // ── NASA GIBS scenes (WMS, true-colour MODIS satellite imagery) ──
 const NASA_SCENES = [
-  { name:'Amazon Rainforest',   bbox:[-65,-10,-45,10],        type:'Tropical'  },
-  { name:'Sahara Desert',       bbox:[0,18,30,35],            type:'Arid'      },
-  { name:'Himalayas',           bbox:[78,26,98,36],           type:'Alpine'    },
-  { name:'Great Barrier Reef',  bbox:[142,-24,154,-14],       type:'Coastal'   },
-  { name:'Greenland',           bbox:[-55,60,-20,80],         type:'Polar'     },
-  { name:'Grand Canyon',        bbox:[-114.5,35.5,-111,37.5], type:'Arid'      },
-  { name:'Nile Delta',          bbox:[29,29,33,32],           type:'Coastal'   },
-  { name:'Maldives',            bbox:[72,1,74,4],             type:'Tropical'  },
-  { name:'Iceland',             bbox:[-25,63,-12,67],         type:'Volcanic'  },
-  { name:'Patagonia',           bbox:[-75,-55,-65,-45],       type:'Alpine'    },
+  { name:'Amazon Rainforest',   bbox:[-65,-10,-45,10],        type:'Tropical',  dim:3.0 },
+  { name:'Sahara Desert',       bbox:[0,18,30,35],            type:'Arid',      dim:4.0 },
+  { name:'Himalayas',           bbox:[78,26,98,36],           type:'Alpine',    dim:3.0 },
+  { name:'Great Barrier Reef',  bbox:[142,-24,154,-14],       type:'Coastal',   dim:2.0 },
+  { name:'Greenland',           bbox:[-55,60,-20,80],         type:'Polar',     dim:4.0 },
+  { name:'Grand Canyon',        bbox:[-114.5,35.5,-111,37.5], type:'Arid',      dim:0.5 },
+  { name:'Nile Delta',          bbox:[29,29,33,32],           type:'Coastal',   dim:0.8 },
+  { name:'Maldives',            bbox:[72,1,74,4],             type:'Tropical',  dim:0.5 },
+  { name:'Iceland',             bbox:[-25,63,-12,67],         type:'Volcanic',  dim:2.5 },
+  { name:'Patagonia',           bbox:[-75,-55,-65,-45],       type:'Alpine',    dim:3.0 },
 ];
 
 // ── OSM scenes (fallback) ──
@@ -843,13 +843,12 @@ function buildOSMUrl(bbox){
 }
 
 function buildLandsatUrl(imgSize, scene){
-  // Esri ArcGIS public Landsat 8/9 WMS (landsat2.arcgis.com)
-  const [minLon,minLat,maxLon,maxLat] = scene.bbox;
-  return `https://landsat2.arcgis.com/arcgis/services/Landsat/MS/ImageServer/WMSServer?`+
-    `SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=0&STYLES=`+
-    `&SRS=EPSG:4326&FORMAT=image/jpeg`+
-    `&WIDTH=${imgSize}&HEIGHT=${imgSize}`+
-    `&BBOX=${minLon},${minLat},${maxLon},${maxLat}`;
+  // NASA Planetary/Earth Imagery API — returns Landsat 8/9 JPEG by lat/lon
+  // DEMO_KEY: 30 req/hr per IP, no registration needed
+  const {lat,lon} = bboxCenter(scene.bbox);
+  const dim = scene.dim || 1.0;
+  return `https://api.nasa.gov/planetary/earth/imagery?`+
+    `lon=${lon}&lat=${lat}&date=${getImageDate()}&dim=${dim}&api_key=DEMO_KEY`;
 }
 
 function buildLandsatViewerUrl(scene){
@@ -859,8 +858,8 @@ function buildLandsatViewerUrl(scene){
 
 async function fetchLandsatImage(imgSize, scene){
   const url = buildLandsatUrl(imgSize, scene);
-  console.log('[ORBITAL] Trying Landsat (ArcGIS):', scene.name);
-  const timeout = new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),10000));
+  console.log('[ORBITAL] Trying Landsat (NASA Earth API):', scene.name);
+  const timeout = new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),12000));
   const load = fetch(url).then(r=>{ if(!r.ok) throw new Error(`HTTP ${r.status}`); return r.blob(); })
     .then(blob=>createImageBitmap(blob))
     .then(bmp=>{ const c=document.createElement('canvas'); c.width=c.height=imgSize; c.getContext('2d').drawImage(bmp,0,0,imgSize,imgSize); bmp.close(); return c; });
